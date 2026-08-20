@@ -1,0 +1,27 @@
+name = "rota-trip-finder-api"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+[vars]
+# Lock this to your GitHub Pages origin once deployed, e.g. "https://you.github.io"
+ALLOWED_ORIGINS = "https://vlues.github.io,http://localhost:8899"
+
+# Stay provider: "airbnb13" | "apify" | "generic"  (see src/providers.js)
+STAY_PROVIDER = "airbnb13"
+RAPIDAPI_HOST = "airbnb13.p.rapidapi.com"
+# PROVIDER_PATH = "/search"        # only for STAY_PROVIDER = "generic"
+# APIFY_ACTOR   = "tri_angle~airbnb-scraper"   # only for STAY_PROVIDER = "apify"
+
+# Flights come from Sky-Scrapper on RapidAPI (same RAPIDAPI_KEY as stays —
+# just subscribe your key to it at rapidapi.com/apiheya/api/sky-scrapper).
+FLIGHT_RAPIDAPI_HOST = "sky-scrapper.p.rapidapi.com"
+
+# Legacy: only used if you hold Amadeus credentials from before their
+# self-service portal was decommissioned (July 2026). "test" = sandbox fares.
+AMADEUS_ENV = "test"
+
+CLAUDE_MODEL = "claude-sonnet-4-5"
+
+# Secrets are NOT set here — use `wrangler secret put`:
+#   RAPIDAPI_KEY (or APIFY_TOKEN), AMADEUS_CLIENT_ID, AMADEUS_CLIENT_SECRET,
+#   ANTHROPIC_API_KEY, ACCESS_CODE

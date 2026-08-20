@@ -1,0 +1,11 @@
+# Copy to worker/.dev.vars for `wrangler dev`. NEVER commit .dev.vars.
+# One RapidAPI key covers stays (Airbnb13) AND flights (Sky-Scrapper) —
+# subscribe the key to both APIs on rapidapi.com.
+RAPIDAPI_KEY=
+# APIFY_TOKEN=
+ANTHROPIC_API_KEY=
+ACCESS_CODE=
+# Legacy — only if you hold credentials from before Amadeus closed
+# self-service (July 2026); when set, flights use Amadeus instead.
+# AMADEUS_CLIENT_ID=
+# AMADEUS_CLIENT_SECRET=

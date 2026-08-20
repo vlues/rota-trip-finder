@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#e8b88a" />
+<title>Spain Vacation</title>
+<meta name="description" content="Stays, flights and a shared shortlist for the crew — one search box." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌅</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Lora:wght@400;600&display=swap" />
+<link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+
+<!-- sunset sky -->
+<div class="sky" aria-hidden="true">
+  <div class="sun"></div>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+</div>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <h1 id="tripName">Spain Vacation</h1>
+      <p class="strap">a trip finder for the crew</p>
+    </div>
+    <button id="settingsBtn" class="gear" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.4-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!-- glass search card -->
+  <section class="search glass">
+    <div class="row">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="rowicon"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+      <input id="destination" type="text" autocomplete="off" enterkeyhint="search"
+        placeholder="Where to? e.g. Rota, Spain" />
+    </div>
+    <div class="row">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="rowicon"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="intent" type="text" autocomplete="off" enterkeyhint="search"
+        placeholder="4 of us, parking, walkable, under €100/night" />
+      <div id="askSpin" class="spin hidden"></div>
+    </div>
+    <div class="row when">
+      <label>check in<input type="date" id="checkin" aria-label="Check in" /></label>
+      <label>check out<input type="date" id="checkout" aria-label="Check out" /></label>
+      <label>guests<input type="number" id="adults" min="1" max="16" value="4" aria-label="Guests" /></label>
+    </div>
+    <div id="tokens" class="tokens"></div>
+    <div id="examples" class="examples"></div>
+  </section>
+
+  <p id="status" class="status"></p>
+
+  <section id="v-stays" class="panel">
+    <div id="stayBar" class="bar hidden">
+      <span id="stayMeta"></span>
+      <select id="sort" aria-label="Sort">
+        <option value="score">best match</option>
+        <option value="price">cheapest</option>
+        <option value="distance">closest to center</option>
+        <option value="rating">top rated</option>
+      </select>
+    </div>
+    <div id="stays" class="feed"></div>
+  </section>
+
+  <section id="v-flights" class="panel hidden">
+    <div class="originbox glass">
+      <input id="origins" type="text" placeholder="Flying from? MAD, BCN, JFK…" autocomplete="off" />
+    </div>
+    <div id="flights" class="feed"></div>
+  </section>
+
+  <section id="v-saved" class="panel hidden">
+    <div class="bar">
+      <span id="savedMeta"></span>
+      <button id="shareBtn" class="btn btn-primary">Share</button>
+    </div>
+    <div id="savedList" class="feed"></div>
+  </section>
+
+</main>
+
+<!-- bottom tab bar -->
+<nav class="tabbar" aria-label="Views">
+  <div class="tabbar-inner glass">
+    <button class="tab on" data-view="stays">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
+      <span>Stays</span>
+    </button>
+    <button class="tab" data-view="flights">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M17.8 19.2 16 11l3.5-3.5a1.5 1.5 0 0 0-2.1-2.1L14 8.9 5.8 7.1a1 1 0 0 0-.9.3l-.7.7a1 1 0 0 0 .2 1.6l6 3.2-2 2H5l-1.5 1.5 3 1 1 3L9 18v-2.4l2-2 3.2 6a1 1 0 0 0 1.6.2l.7-.7a1 1 0 0 0 .3-.9z"/></svg>
+      <span>Flights</span>
+    </button>
+    <button class="tab" data-view="saved">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21.2l7.7-7.7 1.1-1a5.5 5.5 0 0 0 0-7.9z"/></svg>
+      <span>Saved</span>
+      <em id="savedBadge" class="badge hidden"></em>
+    </button>
+  </div>
+</nav>
+
+<div id="sheet" class="sheet hidden">
+  <div class="dialog">
+    <h2 class="dialog-title">Settings</h2>
+    <label class="field">API endpoint<input id="workerUrl" class="input" type="url" placeholder="https://…workers.dev" /></label>
+    <label class="field">Access code<input id="accessCode" class="input" type="password" placeholder="shared passphrase" /></label>
+    <div id="diag" class="diag">Leave blank to browse sample listings. Live prices are a snapshot — confirm on the booking site. Not affiliated with Airbnb.</div>
+    <div class="dialog-actions">
+      <button id="diagBtn" class="btn btn-ghost">Run diagnostics</button>
+      <button id="saveSettings" class="btn btn-primary">Done</button>
+    </div>
+  </div>
+</div>
+
+<script src="./config.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
