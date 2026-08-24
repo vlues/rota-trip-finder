@@ -507,6 +507,37 @@ async function callClaude(env, messages, system, maxTokens = 1200) {
   };
 }
 
+/* Live intel for one Range Rings destination: Claude + web search, so the
+   card can say what is true THIS month. Cached hard — one search per place
+   per month tier is plenty. */
+const SPOT_SYSTEM = `You are the live-intel card inside "Rota Range Rings", a drive-time trip chart for people based in Rota, Spain, driving a 2005 diesel Mercedes E320 (no DGT eco sticker, Crit'Air 4). Use web search to check what is CURRENT at the destination, then reply with exactly 3 short lines, each under 25 words, plain text, in this form:
+NOW: anything a visitor should know right now — closures, roadworks, festivals, new restrictions. If nothing notable, the best seasonal fact.
+DO: one specific, currently open place or activity, named.
+TIP: one practical tip — parking, timing, booking, or weather pattern.
+No preamble, no links, no markdown.`;
+
+async function spotIntel(body, env) {
+  const model = env.CLAUDE_MODEL || DEFAULT_MODEL;
+  const place = [body.name, body.region, body.country].filter(Boolean).join(', ').slice(0, 200);
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model, max_tokens: 1200, system: SPOT_SYSTEM,
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+      messages: [{ role: 'user', content: `Destination: ${place}. Today: ${body.today || 'unknown'}. The three lines, please.` }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  const text = (data.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
+  return { demo: false, text, model };
+}
+
 const CONCIERGE_SYSTEM = `You are the concierge inside "Rota Trip Finder", used by people visiting Naval Station Rota, Spain.
 
 You get the group's criteria and the actual listings returned by live search. You:
@@ -625,6 +656,13 @@ export default {
         case '/api/flights': {
           const key = 'flights:' + JSON.stringify([body.origins, body.destination, body.departDate, body.returnDate, body.adults, body.currency]);
           return json(await cached(key, 6 * 3600, () => searchFlights(body, env)), request, env);
+        }
+        case '/api/spot': {
+          if (!env.ANTHROPIC_API_KEY) {
+            return json({ demo: true, text: null }, request, env);
+          }
+          const key = 'spot:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 7);
+          return json(await cached(key, 12 * 3600, () => spotIntel(body, env)), request, env);
         }
         case '/api/plan':    return json(await makePlan(body, env), request, env);
         case '/api/intent':  return json(await parseIntent(body, env), request, env);

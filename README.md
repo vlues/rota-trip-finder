@@ -4,6 +4,8 @@ Cheap stays, cheap flights and a day-by-day plan for the **Naval Station Rota, S
 
 Static frontend on **GitHub Pages**. All API keys live in a **Cloudflare Worker** you deploy once. Friends just open the link.
 
+**Also on this site: [Rota Range Rings](rings/)** — a drive-time chart of 154 remote, cool, easy trips from Rota. Rings are hours of driving; every pin carries an honest brief (why it's worth it, parking intel for a big car, low-emission-zone warnings for a pre-2006 diesel), a first-load tutorial, a 🎲 surprise-me button, saved places, a smart type-in filter (`"castles in france under 12 h"`), and a **Live intel** card that asks Claude — through the same Worker (`POST /api/spot`, web search, cached 12 h) — what's happening at a destination right now.
+
 ![one input, three views](docs/screenshot.png)
 
 ---
