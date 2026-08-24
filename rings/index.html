@@ -190,12 +190,15 @@ input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;bac
 #qFb{display:flex;flex-wrap:wrap;gap:4px;font-size:10.5px;font-family:"IBM Plex Mono",monospace;color:var(--amber)}
 #qFb span{border:1px solid color-mix(in srgb,var(--amber-b) 45%,transparent);border-radius:2px;padding:2px 6px}
 #qFb:empty{display:none}
+#more{display:none}
+#more.on{display:flex;flex-direction:column;gap:16px;animation:rise .4s cubic-bezier(.22,1,.36,1) both}
+#legend:not(.on){display:none}
 .qpre{border:1px dashed var(--line);padding:4px 9px;font-size:11px;border-radius:12px;color:var(--muted)}
 .qpre:hover{color:var(--amber);border-color:var(--amber-b)}
 
 /* ---------- list ---------- */
 #list{position:absolute;inset:0;z-index:15;background:var(--ground);overflow:auto;display:none;padding-left:302px}
-.listmode #hud,.listmode #carnote{display:none}
+.listmode #hud{display:none}
 #list.on{display:block}
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
 .tbl th{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);text-align:left;
@@ -234,11 +237,6 @@ input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;bac
 #tip{position:absolute;z-index:22;pointer-events:none;background:var(--panel);border:1px solid var(--line);
   padding:5px 8px;font-size:12px;box-shadow:var(--shadow);border-radius:2px;opacity:0;transition:opacity .12s;white-space:nowrap}
 #tip b{font-weight:600} #tip u{text-decoration:none;color:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:10.5px;margin-left:6px}
-#carnote{position:absolute;left:302px;top:14px;z-index:18;max-width:330px;padding:9px 12px;font-size:11.5px;
-  line-height:1.45;color:var(--ink-2)}
-#carnote b{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);display:block;margin-bottom:2px}
-#carnote button{color:var(--muted);text-decoration:underline;font-size:11px;margin-left:4px}
-
 /* ---------- toast ---------- */
 #toast{position:absolute;left:50%;bottom:calc(24px + var(--sab));transform:translate(-50%,80px);z-index:60;
   background:var(--ink);color:var(--panel);font-size:12.5px;font-weight:500;padding:9px 16px;border-radius:3px;
@@ -266,7 +264,6 @@ input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;bac
 .tstep{display:none}.tstep.on{display:block}
 
 /* ---------- responsive ---------- */
-@media (max-width:1180px){ #carnote{display:none} }
 #filtersBtn{display:none;position:relative}
 #filtersBtn em{font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:10px;background:var(--amber-b);color:#fff;
   border-radius:9px;padding:1px 6px;margin-left:5px}
@@ -277,7 +274,6 @@ input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;bac
   #filtersBtn{display:flex;align-items:center;gap:2px;padding:8px 12px;border:1px solid var(--line);
     border-radius:2px;font-size:12.5px;font-weight:600;color:var(--ink);min-height:38px}
   #filtersBtn[aria-expanded="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
-  #carnote{display:none}
   .handle{display:block}
   #rail{position:fixed;left:0;right:0;bottom:0;top:auto;width:auto;max-height:78vh;z-index:40;
     border-radius:10px 10px 0 0;transform:translateY(102%);transition:transform .34s cubic-bezier(.22,1,.36,1)}
@@ -299,7 +295,6 @@ input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;bac
 @media (max-width:600px){
   .tbl th:nth-child(5),.tbl td:nth-child(5){display:none}
   .stat .n{font-size:22px}
-  #hud .hudbox.legend{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
@@ -334,14 +329,12 @@ input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;bac
         <div class="chips">
           <button class="qpre">beach gems</button>
           <button class="qpre">free parking under 2 h</button>
-          <button class="qpre">waterfalls</button>
-          <button class="qpre">no tolls</button>
           <button class="qpre">food in portugal</button>
         </div>
       </div>
 
       <div class="grp">
-        <div class="lbl"><span>Trip size</span></div>
+        <div class="lbl"><span>How far?</span><span class="val" id="hVal">16 h</span></div>
         <div class="chips" id="preChips">
           <button class="pre" data-h="3">Day trip</button>
           <button class="pre" data-h="5">Long day</button>
@@ -351,7 +344,18 @@ input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;bac
       </div>
 
       <div class="grp">
-        <div class="lbl"><span>Max drive, one way</span><span class="val" id="hVal">16 h</span></div>
+        <div class="chips">
+          <button class="pre" id="tGem" aria-pressed="false">Hidden gems</button>
+          <button class="pre" id="tFree" aria-pressed="false">Free parking</button>
+          <button class="pre" id="tFav" aria-pressed="false">♥ Saved</button>
+        </div>
+      </div>
+
+      <button class="brieftog" id="moreTog" aria-expanded="false" style="margin:0;width:100%">More filters <i>▾</i></button>
+      <div id="more">
+
+      <div class="grp">
+        <div class="lbl"><span>Max drive, one way</span></div>
         <input id="hMax" type="range" min="0.5" max="16" step="0.25" value="16" aria-label="Maximum drive hours">
       </div>
 
@@ -361,13 +365,10 @@ input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;bac
       </div>
 
       <div class="grp">
-        <div class="lbl"><span>The parking bonus</span></div>
+        <div class="lbl"><span>Parking</span></div>
         <button class="tog" id="tBonus" aria-pressed="false"><i class="box"></i><span><b>Free &amp; pull-in only</b><span>No coins, no parallel parking</span></span></button>
-        <button class="tog" id="tFree" aria-pressed="false"><i class="box"></i><span><b>Free parking</b><span>Includes mixed free/paid towns</span></span></button>
         <button class="tog" id="tPull" aria-pressed="false"><i class="box"></i><span><b>No parallel parking</b><span>A proper lot or garage you nose into</span></span></button>
-        <button class="tog" id="tGem" aria-pressed="false"><i class="box"></i><span><b>Hidden gems only</b><span>Places the tour coaches skip</span></span></button>
         <button class="tog" id="tLez" aria-pressed="false"><i class="box"></i><span><b>Hide no-label diesel bans</b><span>Drops the cities that fine no-label cars</span></span></button>
-        <button class="tog" id="tFav" aria-pressed="false"><i class="box"></i><span><b>Saved only ♥</b><span>Just the places you've hearted</span></span></button>
       </div>
 
       <div class="grp">
@@ -390,22 +391,13 @@ input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;bac
       </div>
 
       <button class="reset" id="reset">Reset all filters</button>
+      </div>
     </div>
   </aside>
 
-  <div id="carnote" class="panel">
-    <b>Chart is set for your car</b>
-    2005 E320 CDI — 4.85 m long, and a pre-2006 diesel gets no DGT sticker in Spain and rates Crit'Air 4 in
-    France, so some city centres are closed to it. A red ring on a pin means banned today; amber means a zone
-    is coming or needs a check.
-    <button id="carDismiss">hide</button>
-  </div>
-
   <div id="hud">
     <div class="hudbox panel legend" id="legend"></div>
-    <div class="hudbox panel" style="gap:8px">
-      <b>Rings</b><span id="ringLbl">1–16 h</span>
-    </div>
+    <button class="iconbtn" id="keyBtn" title="What the colours mean" aria-label="Toggle the legend">▤</button>
     <button class="iconbtn" id="dice" title="Surprise me" aria-label="Pick a random trip">⚄</button>
     <button class="iconbtn" id="resetView" title="Reset the view" aria-label="Reset the view">⌖</button>
   </div>
@@ -439,9 +431,10 @@ input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;bac
       <div class="tstep" data-s="2">
         <span class="glyph">📌</span>
         <h2>Tap any pin</h2>
-        <p>Each place has a full brief: <b>why it's worth it</b>, the one thing you shouldn't miss, honest
-        <b>parking intel</b> for a big car, road notes and the best season. Tap <b>♥</b> to save it, or
-        <b>Navigate</b> to send the route to Google&nbsp;Maps.</p>
+        <p>Each place has a quick brief: <b>why it's worth it</b>, the one thing not to miss, and honest
+        <b>parking intel</b> — tuned for a big pre-2006 diesel, so a <b style="color:var(--red)">red ring</b>
+        means that city centre is closed to it. Tap <b>♥</b> to save a place, or <b>Navigate</b> to send the
+        route to Google&nbsp;Maps.</p>
       </div>
       <div class="tstep" data-s="3">
         <span class="glyph">⚄</span>

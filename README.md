@@ -4,7 +4,9 @@ Cheap stays, cheap flights and a day-by-day plan for the **Naval Station Rota, S
 
 Static frontend on **GitHub Pages**. All API keys live in a **Cloudflare Worker** you deploy once. Friends just open the link.
 
-**Also on this site: [Rota Range Rings](rings/)** — a drive-time chart of 154 remote, cool, easy trips from Rota. Rings are hours of driving; every pin carries an honest brief (why it's worth it, parking intel for a big car, low-emission-zone warnings for a pre-2006 diesel), a first-load tutorial, a 🎲 surprise-me button, saved places, a smart type-in filter (`"castles in france under 12 h"`), and a **Live intel** card that asks Claude — through the same Worker (`POST /api/spot`, web search, cached 12 h) — what's happening at a destination right now.
+**Also on this site: [Rota Range Rings](rings/)** — a drive-time chart of 154 remote, cool, easy trips from Rota. Rings are hours of driving; every pin opens a super-simple brief (what it is, the one thing to do, parking in one line — the deep detail folds away), with a first-load tutorial, a 🎲 surprise-me button, saved places, a smart type-in filter (`"castles in france under 12 h"`), and a **Live intel** card that asks Claude — through the same Worker (`POST /api/spot`, web search, cached 12 h) — what's happening at a destination right now.
+
+**API setup in one script.** Run `./setup-api.sh` from the repo root: it prompts for your Anthropic key (and an optional access code for friends), stores them as Cloudflare secrets, and deploys the Worker. Nothing secret ever touches the website.
 
 ![one input, three views](docs/screenshot.png)
 

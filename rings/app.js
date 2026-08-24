@@ -581,7 +581,6 @@ function hLabel(h){return h<1?Math.round(h*60)+" min":(h%1?(+h.toFixed(2)):h)+" 
 function setH(h,skipFit){
   F.h=h; $("#hMax").value=h; $("#hVal").textContent=hLabel(h);
   const top=RINGS.filter(R=>R.h<=Math.max(1,h)).pop()||RINGS[0];
-  $("#ringLbl").textContent="1–"+top.h+" h";
   apply(); if(!skipFit) fit();
 }
 $("#hMax").addEventListener("input",e=>setH(+e.target.value));
@@ -619,8 +618,9 @@ $("#reset").onclick=()=>{
   F.h=HMAX;F.b=1;F.bonus=F.free=F.pull=F.gem=F.lez=F.fav=false;F.cats.clear();F.cnts.clear();F.q="";Q=null;
   $("#qFb").innerHTML="";
   $("#hMax").value=HMAX;$("#hVal").textContent=HMAX+" h";$("#bMin").value=1;$("#bVal").textContent="1+";
-  $("#search").value="";$("#ringLbl").textContent="1–16 h";
+  $("#search").value="";
   document.querySelectorAll(".tog").forEach(b=>b.setAttribute("aria-pressed","false"));
+  ["#tGem","#tFree","#tFav"].forEach(s=>$(s).setAttribute("aria-pressed","false"));
   document.querySelectorAll(".chips .chip").forEach(b=>b.setAttribute("aria-pressed","true"));
   apply();cam.yaw=0;cam.pitch=.78;camTo=980;cam.px=55;cam.py=80;flight=null;need();};
 
@@ -681,8 +681,11 @@ function setView(v){const chart=v==="chart";
   $("#list").classList.toggle("on",!chart); document.body.classList.toggle("listmode",!chart);
   if(chart){resize();need();}}
 $("#vChart").onclick=()=>setView("chart"); $("#vList").onclick=()=>setView("list");
+$("#moreTog").onclick=()=>{const m=$("#more"),t=$("#moreTog");const on=!m.classList.contains("on");
+  m.classList.toggle("on",on); t.setAttribute("aria-expanded",on);
+  t.firstChild.textContent=on?"Fewer filters ":"More filters ";};
+$("#keyBtn").onclick=()=>$("#legend").classList.toggle("on");
 $("#resetView").onclick=()=>{cam.yaw=0;cam.pitch=.78;cam.px=55;cam.py=80;camTo=980;flight=null;need();};
-$("#carDismiss").onclick=()=>$("#carnote").style.display="none";
 const mob=()=>matchMedia("(max-width:900px)").matches;
 function sheet(open){$("#rail").classList.toggle("open",open);$("#filtersBtn").setAttribute("aria-expanded",open);}
 $("#filtersBtn").onclick=()=>{if($("#rail").classList.contains("open"))sheet(false);
