@@ -538,6 +538,37 @@ async function spotIntel(body, env) {
   return { demo: false, text, model };
 }
 
+/* Translate a typed sentence into Range Rings filters — the semantic upgrade
+   over the client's regex parser. Heavily cached: the same query costs one
+   Claude call per month. */
+const RINGS_FILTER_SYSTEM = `You translate a traveller's sentence into filters for "Rota Range Rings", a chart of 154 day and road trips from Rota, Spain. Reply with ONLY this JSON:
+{"maxHours":number|null,
+ "minBeauty":number|null,
+ "freeParking":true|null,
+ "noParallel":true|null,
+ "noTolls":true|null,
+ "hiddenGems":true|null,
+ "avoidCarBans":true|null,
+ "cats":["coast","village","city","nature","history","foodwine","quirky"]|null,
+ "countries":["Spain","Portugal","France","Morocco","Andorra","Gibraltar"]|null,
+ "keywords":[]|null,
+ "note":"what you understood, 8 words max"}
+Rules:
+- maxHours = max one-way drive hours, only if a time budget is stated or clearly implied ("day trip" ≈ 3, "weekend away" ≈ 8).
+- minBeauty (1-10) only for "the best / most beautiful / top" — use 8.
+- avoidCarBans when they mention the diesel ban / old car / no-sticker problem.
+- cats: the 2-3 that genuinely fit; vibes map to cats, not keywords ("romantic" → village+foodwine+coast plus hiddenGems; "with kids" → coast+nature).
+- keywords: at most 2 lowercase singular stems, ONLY for specifics no other field expresses ("waterfall", "surf", "lavender", "flamenco"). They substring-match trip descriptions.
+- Null everything not implied. No prose outside the JSON.`;
+
+async function ringsFilter(body, env) {
+  const r = await callClaude(env, [{ role: 'user', content: String(body.text || '').slice(0, 300) }], RINGS_FILTER_SYSTEM, 400);
+  const m = r.text.match(/\{[\s\S]*\}/);
+  let criteria = null;
+  try { criteria = m ? JSON.parse(m[0]) : null; } catch {}
+  return { demo: false, criteria };
+}
+
 const CONCIERGE_SYSTEM = `You are the concierge inside "Rota Trip Finder", used by people visiting Naval Station Rota, Spain.
 
 You get the group's criteria and the actual listings returned by live search. You:
@@ -663,6 +694,11 @@ export default {
           }
           const key = 'spot:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 7);
           return json(await cached(key, 12 * 3600, () => spotIntel(body, env)), request, env);
+        }
+        case '/api/rings-filter': {
+          if (!env.ANTHROPIC_API_KEY) return json({ demo: true, criteria: null }, request, env);
+          const key = 'rfilter:' + String(body.text || '').toLowerCase().trim().slice(0, 120);
+          return json(await cached(key, 30 * 24 * 3600, () => ringsFilter(body, env)), request, env);
         }
         case '/api/plan':    return json(await makePlan(body, env), request, env);
         case '/api/intent':  return json(await parseIntent(body, env), request, env);

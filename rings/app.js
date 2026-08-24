@@ -104,10 +104,13 @@ function pass(o){
     if(Q.pull&&o.pp) return false;
     if(Q.gem&&!o.gem) return false;
     if(Q.notoll&&!/^no toll/i.test(o.toll||"")) return false;
+    if(Q.b&&o.b<Q.b) return false;
+    if(Q.lez&&o.lez===2) return false;
     if(Q.cats&&!o.cats.some(c=>Q.cats.has(c))) return false;
     if(Q.cnts&&!Q.cnts.has(o.c.split(" ")[0])) return false;
     if(Q.text){const s=(o.n+" "+o.r+" "+o.c+" "+o.why+" "+o.one+" "+o.season).toLowerCase();
-      if(!Q.text.every(w=>s.includes(w))) return false;}
+      const ok=Q.textAny?Q.text.some(w=>s.includes(w)):Q.text.every(w=>s.includes(w));
+      if(!ok) return false;}
   }
   return true;
 }
@@ -585,10 +588,62 @@ function setH(h,skipFit){
 }
 $("#hMax").addEventListener("input",e=>setH(+e.target.value));
 $("#bMin").addEventListener("input",e=>{F.b=+e.target.value;$("#bVal").textContent=F.b+"+";apply();});
+function renderQFb(ai,pending){
+  $("#qFb").innerHTML=(Q?Q.chips.map(c=>"<span>"+esc(c)+"</span>").join(""):"")+
+    (ai?'<span title="Filter understood by Claude">✦ Claude</span>':"")+
+    (pending?'<span style="opacity:.5">✦ asking Claude…</span>':"");
+}
+/* The regex parse answers instantly; 700 ms after typing settles, Claude
+   re-reads the sentence through the Worker and replaces it with a semantic
+   parse — categories included ("romantic" → village + food & wine + gems). */
+const smartCache=new Map();
+let smartT=null;
+async function smartParse(text){
+  const cfg=apiCfg(); if(!cfg.api||!cfg.code) return;
+  const key=text.toLowerCase();
+  let crit=smartCache.get(key);
+  if(crit===undefined){
+    try{
+      const res=await fetch(cfg.api+"/api/rings-filter",{method:"POST",
+        headers:{"Content-Type":"application/json","X-Trip-Code":cfg.code},
+        body:JSON.stringify({text:text})});
+      crit=res.ok?((await res.json()).criteria||null):null;
+      if(res.ok) smartCache.set(key,crit);
+    }catch(e){crit=null;}
+  }
+  if($("#search").value.trim()!==text) return; // typed on — stale answer
+  const q=crit?critToQ(crit):null;
+  if(q){Q=q; renderQFb(true); apply();}
+  else renderQFb(false); // keep the regex parse, drop the pending chip
+}
+function critToQ(c){
+  const q={chips:[]};
+  if(+c.maxHours){q.h=+c.maxHours;q.chips.push("≤ "+q.h+" h");}
+  if(+c.minBeauty>1){q.b=Math.min(10,+c.minBeauty);q.chips.push("beauty "+q.b+"+");}
+  if(c.freeParking){q.free=true;q.chips.push("free parking");}
+  if(c.noParallel){q.pull=true;q.chips.push("no parallel");}
+  if(c.noTolls){q.notoll=true;q.chips.push("no tolls");}
+  if(c.hiddenGems){q.gem=true;q.chips.push("hidden gems");}
+  if(c.avoidCarBans){q.lez=true;q.chips.push("no car-ban cities");}
+  if(Array.isArray(c.cats)&&c.cats.length){
+    const set=new Set(c.cats.filter(k=>CAT[k]));
+    if(set.size&&set.size<Object.keys(CAT).length){q.cats=set;
+      q.chips.push([...set].map(k=>CAT[k].toLowerCase()).join(" / "));}}
+  if(Array.isArray(c.countries)&&c.countries.length){
+    q.cnts=new Set(c.countries.map(k=>k==="Gibraltar"?"United":k));
+    q.chips.push(c.countries.join(", "));}
+  if(Array.isArray(c.keywords)&&c.keywords.length){
+    q.text=c.keywords.map(s=>String(s).toLowerCase()).filter(Boolean).slice(0,2);
+    q.textAny=true; if(q.text.length)q.chips.push("“"+q.text.join(" · ")+"”");}
+  return q.chips.length?q:null;
+}
 $("#search").addEventListener("input",e=>{
   F.q=e.target.value.trim(); Q=parseQ(F.q);
-  $("#qFb").innerHTML=Q?Q.chips.map(c=>"<span>"+esc(c)+"</span>").join(""):"";
-  apply();});
+  clearTimeout(smartT);
+  const cfg=apiCfg(), smart=F.q.length>3&&cfg.api&&cfg.code;
+  renderQFb(false,smart); apply();
+  if(smart) smartT=setTimeout(()=>smartParse(F.q),700);
+});
 document.querySelectorAll(".qpre").forEach(b=>b.addEventListener("click",()=>{
   const s=$("#search"); s.value=b.textContent; s.dispatchEvent(new Event("input")); }));
 $("#cntCap").textContent="OF "+D.length+" SHOWN";
