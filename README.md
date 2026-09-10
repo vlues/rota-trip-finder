@@ -4,7 +4,7 @@ Cheap stays, cheap flights and a day-by-day plan for the **Naval Station Rota, S
 
 Static frontend on **GitHub Pages**. All API keys live in a **Cloudflare Worker** you deploy once. Friends just open the link.
 
-**Also on this site: [Rota Range Rings](rings/)** — a drive-time chart of 154 remote, cool, easy trips from Rota. Rings are hours of driving; every pin opens a super-simple brief (what it is, the one thing to do, parking in one line — the deep detail folds away), with a first-load tutorial, a 🎲 surprise-me button, saved places, a smart type-in filter (`"castles in france under 12 h"`), and a **Live intel** card that asks Claude — through the same Worker (`POST /api/spot`, web search, cached 12 h) — what's happening at a destination right now.
+**Also on this site: [Hike Finder](hikes/)** — 100 walks across Spain on a terrain map, each with the car park, the walking time, whether it is open right now and a live web-search check. And **[Rota Range Rings](rings/)** — a drive-time chart of 154 remote, cool, easy trips from Rota. Rings are hours of driving; every pin opens a super-simple brief (what it is, the one thing to do, parking in one line — the deep detail folds away), with a first-load tutorial, a 🎲 surprise-me button, saved places, a smart type-in filter (`"castles in france under 12 h"`), and a **Live intel** card that asks Claude — through the same Worker (`POST /api/spot`, web search, cached 12 h) — what's happening at a destination right now.
 
 **API setup in one script.** Run `./setup-api.sh` from the repo root: it prompts for your Anthropic key (and an optional access code for friends), stores them as Cloudflare secrets, and deploys the Worker. Nothing secret ever touches the website.
 
@@ -45,6 +45,27 @@ Nothing but you ever sees a key. The Worker enforces an origin allowlist and a s
 **Saved + share.** Heart anything and it lands in the Saved tab (with a badge). Hit Share and your friends open the same shortlist — the actual picture cards, prices and criteria, before live search even returns. State is in the URL — no database, no accounts.
 
 One sunset-glass look, implemented from the Claude Design canvas (`Spain Vacation.dc.html`) on the "Classical" design-system tokens. Three tabs — Stays, Flights, Saved — and nothing else. (The old Rota day-planner endpoint still lives in the Worker for anyone who wants it back.)
+
+---
+
+## Hike Finder (`hikes/`)
+
+A second sub-app, map-first: **[hikes/](hikes/)**.
+
+100 hand-written trails, weighted to what you can drive to from Rota in a morning — the Grazalema gorges, the Barbate cliffs, the Cazorla river walks — with the rest of Spain's greatest hits (Cares, Ordesa, Caminito del Rey, Teide) behind them. Every card answers the four things you actually need before setting off:
+
+- **Where to park** — named car park with its own coordinates, what it costs, and the real detail (which lot fills by 10:00, which access road closes to cars in August, where the shuttle bus goes from). One tap opens driving directions to *the car park*, not to a pin in the middle of a mountain.
+- **How long** — distance as walked, metres of ascent, moving hours, difficulty, and whether it is a loop, an out-and-back or a one-way that needs a second car.
+- **Open or closed, right now** — every trail carries an access model: open access, gated hours by month, ticketed with closed weekdays, permit-only, plus seasonal closures (Garganta Verde shuts 1 June–15 October for vulture nesting; the Cíes ferries stop in autumn). The badge is computed against the **Europe/Madrid** wall clock, so it stays right when someone opens the link from the States. Open-access daylight routes get real sunrise/sunset for that trailhead, that date.
+- **What it actually is** — one honest paragraph, and the one tip that saves the day.
+
+**The map** is Leaflet on OpenTopoMap terrain with contours and hillshade, switchable to satellite or street. Pins are coloured by difficulty; selecting a trail drops a separate **P** marker on the car park with a dashed line to the trailhead, then frames both — offset around whichever panel is covering the map. There is a locate-me button that re-sorts the whole list by distance from where you are standing.
+
+Filters are chips (`Easy`, `< 2 h drive`, `Open now`, `No booking`, `Free parking`, `Water`, `Shade`, `Kids`, `Dogs`) plus a free-text box that searches names, areas and descriptions. Saved trails live in `localStorage`; every trail has a shareable `#slug` URL.
+
+**Live check** asks Claude — through the same Worker, `POST /api/trail`, web search on, cached 12 h per trail per day — for what is true *this week*: current closures and permits, car-park and shuttle status, water level or snow, and the one thing that would ruin the day. It is the only part that needs a key; everything else works offline from `hikes/data.js`.
+
+> Hours, permits and capacity caps in Spain move around. The dataset is the starting point, every card links to the official park or town-hall page, and Live check is there for the morning you actually drive out.
 
 ---
 

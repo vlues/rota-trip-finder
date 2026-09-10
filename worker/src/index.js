@@ -507,6 +507,17 @@ async function callClaude(env, messages, system, maxTokens = 1200) {
   };
 }
 
+/* The dynamic-filtering web search tool only exists on 4.6-and-newer models;
+   anything older still takes the original one. Keeps CLAUDE_MODEL swappable. */
+const MODERN_SEARCH = /^claude-(opus-(5|4-8|4-7|4-6)|sonnet-(5|4-6)|fable-5)/;
+function webSearchTool(model, maxUses) {
+  return {
+    type: MODERN_SEARCH.test(model) ? 'web_search_20260209' : 'web_search_20250305',
+    name: 'web_search',
+    max_uses: maxUses,
+  };
+}
+
 /* Live intel for one Range Rings destination: Claude + web search, so the
    card can say what is true THIS month. Cached hard — one search per place
    per month tier is plenty. */
@@ -528,8 +539,45 @@ async function spotIntel(body, env) {
     },
     body: JSON.stringify({
       model, max_tokens: 1200, system: SPOT_SYSTEM,
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+      tools: [webSearchTool(model, 3)],
       messages: [{ role: 'user', content: `Destination: ${place}. Today: ${body.today || 'unknown'}. The three lines, please.` }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  const text = (data.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
+  return { demo: false, text, model };
+}
+
+/* Live intel for one hike in the Hike Finder. Different question from a
+   destination: the things that change on a trail are closures, permits,
+   water and whether the car park is full — so the prompt asks for those. */
+const TRAIL_SYSTEM = `You are the live-conditions card inside "Rota Hike Finder", used by people driving out from Rota, Spain to walk a named trail. Search the web for what is TRUE THIS WEEK for the trail you are given — official park pages, town halls, recent hiker reports. Then reply with exactly 4 short lines, plain text, each under 25 words, in this form:
+OPEN: is it open, and are permits/tickets needed right now? Name any current closure, cap or booking requirement, with the date if you find one.
+PARK: anything current about the car park or access road — closures, shuttle buses, summer capacity limits, charges.
+TRAIL: current condition — water level, snow, mud, damage, works, heat or fire risk.
+WATCH: the one thing that would ruin the day if they did not know it.
+If the web gives you nothing recent for a line, say what is normally true for this time of year and start that line with "Usually". Never invent a closure or a price. No preamble, no links, no markdown.`;
+
+async function trailIntel(body, env) {
+  const model = env.CLAUDE_MODEL || DEFAULT_MODEL;
+  const trail = [body.name, body.area, body.province, body.country || 'Spain'].filter(Boolean).join(', ').slice(0, 200);
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model, max_tokens: 1500, system: TRAIL_SYSTEM,
+      tools: [webSearchTool(model, 4)],
+      messages: [{
+        role: 'user',
+        content: `Trail: ${trail}. Access type on file: ${body.access || 'unknown'}.`
+          + (body.official ? ` Official page: ${String(body.official).slice(0, 200)}.` : '')
+          + ` Today: ${body.today || 'unknown'}. The four lines, please.`,
+      }],
     }),
   });
   if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
@@ -694,6 +742,14 @@ export default {
           }
           const key = 'spot:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 7);
           return json(await cached(key, 12 * 3600, () => spotIntel(body, env)), request, env);
+        }
+        case '/api/trail': {
+          if (!env.ANTHROPIC_API_KEY) {
+            return json({ demo: true, text: null }, request, env);
+          }
+          /* Conditions move week to week, so the cache key carries the date. */
+          const key = 'trail:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 10);
+          return json(await cached(key, 12 * 3600, () => trailIntel(body, env)), request, env);
         }
         case '/api/rings-filter': {
           if (!env.ANTHROPIC_API_KEY) return json({ demo: true, criteria: null }, request, env);
