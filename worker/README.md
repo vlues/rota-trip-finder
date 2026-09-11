@@ -11,9 +11,15 @@ The secrets-holding half. Root README has the full setup.
 | POST | `/api/plan`    | day-by-day area itinerary |
 | POST | `/api/intent`  | sentence → structured criteria |
 | POST | `/api/ai`      | concierge opinion over the current results |
-| POST | `/api/surf`    | live beach intel for Wave Watch — web search, cached 6 h |
+| POST | `/api/surf`    | live beach intel for Wave Watch — web search, cached 6 h, **no access code** |
 
-POST routes require `X-Trip-Code: <ACCESS_CODE>` when that secret is set.
+POST routes require `X-Trip-Code: <ACCESS_CODE>` when that secret is set — except
+`/api/surf`, which is open so that Wave Watch needs no setup. It is bounded
+instead: requests from an origin outside `ALLOWED_ORIGINS` are refused 403 (not
+merely denied the CORS header), only the seventeen known beach names are
+answerable, and each is cached 6 h — so the worst case is seventeen Claude calls
+a day. `GET /api/health` lists `routes` and `openRoutes` so a deploy can be
+verified without the code.
 Any unconfigured provider degrades to demo data rather than erroring — the
 site is never broken, only less live.
 

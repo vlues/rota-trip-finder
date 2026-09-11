@@ -29,9 +29,21 @@ const DEFAULT_MODEL = 'claude-sonnet-4-5';
 
 /* ------------------------------------------------------------------ http */
 
+function allowedOrigins(env) {
+  return (env.ALLOWED_ORIGINS || '*').split(',').map((s) => s.trim()).filter(Boolean);
+}
+function originAllowed(request, env) {
+  const allowed = allowedOrigins(env);
+  if (allowed.includes('*')) return true;
+  const origin = request.headers.get('Origin');
+  /* No Origin header at all means a non-browser client (curl, a script). The
+     public endpoints below are for this site's pages, so that is not one. */
+  return Boolean(origin) && allowed.includes(origin);
+}
+
 function corsHeaders(request, env) {
   const origin = request.headers.get('Origin') || '';
-  const allowed = (env.ALLOWED_ORIGINS || '*').split(',').map((s) => s.trim()).filter(Boolean);
+  const allowed = allowedOrigins(env);
   const ok = allowed.includes('*') || allowed.includes(origin);
   return {
     'Access-Control-Allow-Origin': ok ? (origin || '*') : allowed[0] || '*',
@@ -560,6 +572,20 @@ TRAIL: current condition — water level, snow, mud, damage, works, heat or fire
 WATCH: the one thing that would ruin the day if they did not know it.
 If the web gives you nothing recent for a line, say what is normally true for this time of year and start that line with "Usually". Never invent a closure or a price. No preamble, no links, no markdown.`;
 
+/* Live check is open — no access code — so that the site needs no setup. The
+   cost ceiling therefore cannot depend on a passphrase: it comes from this
+   list. Only these beaches are answerable, and each answer is cached for six
+   hours, so the most Claude can ever be asked in a day is bounded no matter
+   what anyone posts. Without it, varying the name would bust the cache and
+   the bill would be open-ended. */
+const SURF_BEACHES = new Set([
+  'Playa de la Costilla', 'Punta Candor', 'Playa de Aguadulce', 'Playa de la Ballena',
+  'Playa de las Tres Piedras', 'Fuentebravía / La Muralla', 'Playa de Santa Catalina',
+  'Playa de la Victoria', 'Playa de Cortadura', 'La Caleta', 'Playa de la Barrosa',
+  'El Roqueo / Fuente del Gallo', 'Playa de El Palmar', 'Los Caños de Meca',
+  'Playa de Zahara de los Atunes', 'Playa de Bolonia', 'Playa de Los Lances',
+]);
+
 const SURF_SYSTEM = `You are the live-intel card inside "Rota Wave Watch", used by a bodyboarder driving out from Rota, Spain to a named beach on the Cádiz coast.
 
 The page ALREADY has the numbers — wave height, period, swell direction, wind, tide, sea temperature — from four weather models. Do not restate them and do not give a wave forecast. Your job is the things a weather model cannot know, found by searching the web for what is true RIGHT NOW at that specific beach: municipal and Junta de Andalucía notices, town hall pages, local news, beach-flag and water-quality services, jellyfish reports, surf shops and school pages, recent local posts.
@@ -786,6 +812,8 @@ export default {
         },
         stayProvider: name,
         accessCodeRequired: Boolean(env.ACCESS_CODE),
+        /* Live check needs none, so a page can tell whether to ask. */
+        openRoutes: ['/api/surf'],
         /* Every POST route sits behind the access code, so without this there
            is no way to tell a Worker running old code from a wrong passphrase —
            both answer 401. Listing them here, on the one ungated endpoint,
@@ -800,7 +828,17 @@ export default {
       return health;
     }
 
-    if (env.ACCESS_CODE && request.headers.get('X-Trip-Code') !== env.ACCESS_CODE) {
+    /* Live check is deliberately open: the site should need no setup at all.
+       What keeps it from being a free Claude endpoint is that it only answers
+       for this site's own origins, only for the seventeen beaches it knows,
+       and only once per beach per six hours. Everything else — the paid stay
+       and flight providers, and the open-ended Claude routes — still needs
+       the shared code. */
+    const isOpenIntel = url.pathname === '/api/surf' && request.method === 'POST';
+    if (isOpenIntel && !originAllowed(request, env)) {
+      return json({ error: 'This endpoint only answers requests from the site.' }, request, env, 403);
+    }
+    if (!isOpenIntel && env.ACCESS_CODE && request.headers.get('X-Trip-Code') !== env.ACCESS_CODE) {
       return json({ error: 'Bad or missing access code.' }, request, env, 401);
     }
 
@@ -838,6 +876,9 @@ export default {
         case '/api/surf': {
           if (!env.ANTHROPIC_API_KEY) {
             return json({ demo: true, text: null }, request, env);
+          }
+          if (!SURF_BEACHES.has(String(body.name || ''))) {
+            return json({ error: 'Unknown beach.' }, request, env, 400);
           }
           /* Beach conditions move faster than trail conditions, and the flag
              and jellyfish lines are same-day facts — so the cache key carries

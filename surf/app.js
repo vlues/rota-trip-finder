@@ -705,7 +705,6 @@ var S = {
   sel: null,           /* {spotId, key} chosen from the grid or chart */
   filters: { boards: false, beginner: false, freePark: false, noRocks: false },
   plan: null,          /* the last "just tell me" answer, kept across re-renders */
-  health: undefined,   /* undefined = not asked yet, null = could not ask */
   bar: 62,             /* the score you personally think is worth the drive */
   err: null
 };
@@ -1866,25 +1865,11 @@ function cfg() {
   };
 }
 
-/* The Worker's /api/health is deliberately not behind the access code, so the
-   page can find out what is actually missing before asking for anything. That
-   turns "fill in these two boxes" into "it needs the code you already set". */
-var healthCache = null;
-function probeHealth() {
-  var c = cfg();
-  if (!c.api) return Promise.resolve(null);
-  if (healthCache && healthCache.api === c.api) return Promise.resolve(healthCache.data);
-  /* Belt and braces with the Worker's own no-store header: a stale health
-     answer would misreport what is configured. */
-  return fetch(c.api + "/api/health?t=" + Math.floor(Date.now() / 600000), { cache: "no-store" })
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .catch(function () { return null; })
-    .then(function (d) {
-      healthCache = { api: c.api, data: d };
-      S.health = d;
-      return d;
-    });
-}
+/* There is nothing left to ask the user for: the Worker URL ships in
+   config.js and Live check needs no access code. The Worker answers /api/surf
+   only for this site's own origins, only for the beaches it knows, and only
+   once per beach per six hours, which is what keeps it from being a free
+   Claude endpoint. */
 
 function intelStore() {
   try { return JSON.parse(localStorage.getItem(INTEL_KEY)) || {}; } catch (e) { return {}; }
@@ -1941,76 +1926,17 @@ function renderIntelCard(host, spot, sc) {
     return;
   }
 
-  /* Configured but not yet usable: find out which, and ask only for that. */
-  if (!cachedHit && !c.code) {
-    card.innerHTML = head + '<p class="intel-load"><span class="spinner sm"></span> Checking the Worker…</p>';
-    host.appendChild(card);
-    $("#intelCfg").addEventListener("click", openCfgDialog);
-    probeHealth().then(function (h) {
-      if (!document.body.contains(card)) return;
-      if (h && h.accessCodeRequired) { codePrompt(card, head, spot, sc, h, null); return; }
-      if (h && h.providers && h.providers.ai === "off") {
-        card.innerHTML = head +
-          '<p>Your Worker is live, but it has no Anthropic key, so live intel is switched off. ' +
-          'Run <code>./setup-api.sh</code> from the repo once to add one — the key stays a Cloudflare ' +
-          'secret and never reaches this page.</p>';
-        return;
-      }
-      readyCard(card, head, spot, sc);
-    });
-    return;
-  }
-
   if (cachedHit) {
     card.innerHTML = head + intelHtml(cachedHit.text, cachedHit.model) +
       '<div class="shrow"><button class="btn" id="intelGo">Check again ↻</button>' +
       '<span class="foot">last checked ' + agoLabel(cachedHit.at) + '</span></div>';
   } else {
-    card.innerHTML = head +
-      '<p class="foot">Water quality and medusas, today’s flag and tower situation, the car park, and ' +
-      'whether the bank has moved — the things four weather models cannot tell you.</p>' +
+    card.innerHTML = head + '<p class="foot">' + INTEL_BLURB + '</p>' +
       '<div class="shrow"><button class="btn btn-go" id="intelGo">Check this beach now</button></div>';
   }
   host.appendChild(card);
   $("#intelCfg").addEventListener("click", openCfgDialog);
   $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
-}
-
-/* Everything is in place — just offer the button. */
-function readyCard(card, head, spot, sc) {
-  card.innerHTML = head + '<p class="foot">' + INTEL_BLURB + '</p>' +
-    '<div class="shrow"><button class="btn btn-go" id="intelGo">Check this beach now</button></div>';
-  $("#intelCfg").addEventListener("click", openCfgDialog);
-  $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
-}
-
-/* The Worker is up and Claude is on; the only missing piece is the shared
-   passphrase, so ask for that one thing inline rather than opening a dialog
-   with two boxes in it. */
-function codePrompt(card, head, spot, sc, h, err) {
-  card.innerHTML = head +
-    (err ? '<p class="plan-warn">' + esc(err) + '</p>' : '') +
-    '<p class="foot">The Worker is live and Claude is switched on' +
-      (h && h.providers ? ' (' + esc(h.providers.ai) + ')' : '') +
-      '. It just wants the access code you set when you deployed it — the shared passphrase that stops ' +
-      'strangers spending your quota. Enter it once and Hike Finder and Range Rings will use it too.</p>' +
-    '<label class="field">Access code<input id="intelCode" class="input" type="password" ' +
-      'autocomplete="off" placeholder="the passphrase you chose"></label>' +
-    '<div class="shrow"><button class="btn btn-go" id="intelCodeSave">Save and check</button>' +
-    '<button class="mini" id="intelCfg2">other settings</button></div>';
-  $("#intelCfg").addEventListener("click", openCfgDialog);
-  $("#intelCfg2").addEventListener("click", openCfgDialog);
-  var save = function () {
-    var code = $("#intelCode").value.trim();
-    if (!code) return;
-    var cur = cfg();
-    try {
-      localStorage.setItem("rtf.cfg", JSON.stringify({ api: cur.api, code: code }));
-    } catch (e) { /* private mode */ }
-    askIntel(card, spot, sc);
-  };
-  $("#intelCodeSave").addEventListener("click", save);
-  $("#intelCode").addEventListener("keydown", function (e) { if (e.key === "Enter") save(); });
 }
 
 function agoLabel(at) {
@@ -2064,12 +1990,6 @@ function askIntel(card, spot, sc) {
     $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
   })
   .catch(function (err) {
-    if (/access code/i.test(err.message)) {
-      probeHealth().then(function (h) {
-        codePrompt(card, head, spot, sc, h, "That code was not accepted. Try again.");
-      });
-      return;
-    }
     card.innerHTML = head + '<p>Could not reach the intel service — ' + esc(err.message) + '.</p>' +
       '<div class="shrow"><button class="btn" id="intelGo">Try again</button>' +
       '<button class="btn" id="intelSetup">Settings</button></div>';
@@ -2393,31 +2313,6 @@ function renderHeader() {
   }
 }
 
-/* Live check is the last thing left to switch on, and its card sits six
-   sections down the page. Until the code is in, say so at the top — and the
-   moment it is in, this never appears again. */
-function renderSetupBar() {
-  var bar = $("#setupBar");
-  if (!bar) return;
-  var c = cfg();
-  var need = c.api && !c.code && S.health && S.health.accessCodeRequired &&
-             !(S.health.providers && S.health.providers.ai === "off");
-  if (!need) { bar.hidden = true; bar.innerHTML = ""; return; }
-  bar.hidden = false;
-  bar.innerHTML = '<button id="setupGo">' +
-    '<b>Finish setup</b> — Live check needs the access code you chose. One tap, once.' +
-    '<span aria-hidden="true">→</span></button>';
-  $("#setupGo").addEventListener("click", function () {
-    if (S.view !== "now") setView("now");
-    setTimeout(function () {
-      var card = $(".intel");
-      if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
-      var input = $("#intelCode");
-      if (input) setTimeout(function () { input.focus(); }, 420);
-    }, 60);
-  });
-}
-
 function setView(v) {
   S.view = v;
   $$(".tab").forEach(function (t) { t.classList.toggle("on", t.getAttribute("data-view") === v); });
@@ -2430,7 +2325,6 @@ function render() {
   if (!S.model) return;
   writeHash();
   renderHeader();
-  renderSetupBar();
   if (S.view === "now") renderNow();
   else if (S.view === "grid") renderGrid();
   else if (S.view === "spots") renderSpots();
@@ -2473,8 +2367,6 @@ function boot() {
     $("#boot").classList.add("hidden");
     $("#app").classList.remove("hidden");
     render();
-    /* Find out what the Worker still needs, then let the bar decide. */
-    if (S.health === undefined) probeHealth().then(function () { renderSetupBar(); });
   }).catch(function (e) {
     if (S.model) {              /* the cached copy is already on screen */
       S.model.stale = true;

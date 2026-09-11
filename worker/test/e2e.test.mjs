@@ -148,6 +148,16 @@ const req = (path, body, { env = ENV_FULL, code = 'rota2026', origin = 'https://
     body: method === 'POST' ? JSON.stringify(body || {}) : undefined,
   }), env);
 
+/* A visitor who has never entered a code: no X-Trip-Code header at all.
+   Passing `code: undefined` to req() does NOT do this — it falls back to the
+   default parameter and quietly sends the valid code. */
+const reqNoCode = (path, body, { env = ENV_FULL, origin = 'https://parker.github.io' } = {}) =>
+  worker.fetch(new Request('https://api.test' + path, {
+    method: 'POST',
+    headers: Object.assign({ 'Content-Type': 'application/json' }, origin ? { Origin: origin } : {}),
+    body: JSON.stringify(body || {}),
+  }), env);
+
 const ok = (name) => console.log('  ✓ ' + name);
 
 /* ------------------------------------------------------------------ run */
@@ -525,6 +535,49 @@ console.log('\nWorker end-to-end\n');
   assert.equal(d.text, null);
   assert.equal(calls.filter((c) => c.url.includes('anthropic')).length, 0);
   ok('surf intel: no Claude key means a clean demo response, not an error');
+}
+
+/* --- live surf intel is open, but only to this site --- */
+{
+  installFetch({ 'api.anthropic.com': (u, i, reply) => reply(claudeReply('WATER: fine.\nFLAG: fine.\nPARK: fine.\nSEA: fine.\nWATCH: fine.')) });
+  const r = await reqNoCode('/api/surf', { name: 'Playa de El Palmar' });
+  const d = await r.json();
+  assert.equal(r.status, 200);
+  assert.equal(d.demo, false);
+  assert.match(d.text, /^WATER:/);
+  ok('surf intel: needs no access code, so the site needs no setup');
+}
+{
+  installFetch();
+  const r = await reqNoCode('/api/surf', { name: 'Playa de El Palmar' }, { origin: 'https://evil.test' });
+  assert.equal(r.status, 403);
+  assert.equal(calls.filter((c) => c.url.includes('anthropic')).length, 0, 'Claude is never called');
+  ok('surf intel: another origin is refused, not just denied the CORS header');
+}
+{
+  installFetch();
+  const r = await reqNoCode('/api/surf', { name: 'Playa de El Palmar' }, { origin: null });
+  assert.equal(r.status, 403);
+  assert.equal(calls.filter((c) => c.url.includes('anthropic')).length, 0);
+  ok('surf intel: a client with no Origin at all (curl) is refused');
+}
+{
+  installFetch();
+  /* The cost ceiling depends on the key space staying bounded: an unknown
+     name must not reach Claude, or the six-hour cache is trivially busted. */
+  const r = await reqNoCode('/api/surf', { name: 'Made Up Beach ' + Math.random() });
+  assert.equal(r.status, 400);
+  assert.equal(calls.filter((c) => c.url.includes('anthropic')).length, 0, 'no Claude call for an unknown beach');
+  ok('surf intel: only the seventeen known beaches are answerable');
+}
+{
+  installFetch();
+  /* Opening surf must not have opened anything else. */
+  assert.equal((await reqNoCode('/api/ai', { query: 'hi' })).status, 401);
+  assert.equal((await reqNoCode('/api/stays', { anchor: { lat: 36.6, lng: -6.3 } })).status, 401);
+  assert.equal((await reqNoCode('/api/trail', { name: 'Cares' })).status, 401);
+  assert.equal(calls.filter((c) => c.url.includes('anthropic')).length, 0);
+  ok('the paid and open-ended routes still require the access code');
 }
 
 /* --- unknown route --- */
