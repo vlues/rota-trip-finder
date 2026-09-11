@@ -8,7 +8,7 @@
    copy in localStorage and knows how to label it as stale, which is more
    honest than replaying an old HTTP response as if it were fresh. */
 
-var CACHE = "rota-wave-v3";
+var CACHE = "rota-wave-v4";
 /* The scripts carry a ?v= build stamp, so they are cached on first use rather
    than precached under a bare name that nothing will ever request. */
 var SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png"];
@@ -22,13 +22,34 @@ self.addEventListener("install", function (e) {
   );
 });
 
+/* A page can be stranded on an old build: the version check that reloads a
+   stale page only exists in builds that carry the version meta tag, and a
+   home-screen install pins whatever it last cached. So the worker itself does
+   the rescuing. On any upgrade it throws away every cache and navigates the
+   open windows, which re-fetches the HTML from the network — the only thing
+   that reliably reaches a client that cannot help itself. */
 self.addEventListener("activate", function (e) {
   e.waitUntil(
-    caches.keys().then(function (keys) {
-      return Promise.all(keys.map(function (k) {
-        return k === CACHE ? null : caches.delete(k);
-      }));
-    }).then(function () { return self.clients.claim(); })
+    caches.keys()
+      .then(function (keys) {
+        var stale = keys.filter(function (k) { return k !== CACHE; });
+        return Promise.all(stale.map(function (k) { return caches.delete(k); }))
+          .then(function () { return stale.length > 0; });
+      })
+      .then(function (wasUpgrade) {
+        return self.clients.claim().then(function () { return wasUpgrade; });
+      })
+      .then(function (wasUpgrade) {
+        /* Not on a first install — there would be nothing stale to escape,
+           and navigating then would just reload the page someone opened. */
+        if (!wasUpgrade) return null;
+        return self.clients.matchAll({ type: "window" }).then(function (cs) {
+          cs.forEach(function (c) {
+            try { c.navigate(c.url); } catch (err) { /* older browsers */ }
+          });
+        });
+      })
+      .catch(function () { /* rescuing is best effort; never block activation */ })
   );
 });
 
