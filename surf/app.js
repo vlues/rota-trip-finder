@@ -1266,6 +1266,9 @@ function renderNow() {
       : "");
   host.appendChild(safety);
 
+  /* ── the one thing the models cannot tell you ── */
+  renderIntelCard(host, spot, sc);
+
   /* ── what to bring ── */
   var kit = kitFor(sc, spot);
   var gear = el("section", "card");
@@ -1842,6 +1845,162 @@ function leaveAt(spot, hour) {
   return { at: pad(Math.floor(mins / 60)) + ":" + pad(mins % 60), note: d };
 }
 
+/* ═════════════════════════ live intel ═════════════════════════
+   Everything else on this page is arithmetic on weather models. This is the
+   part that asks a person-shaped question: is the water actually clean, are
+   there medusas in it, is the car park dug up, has the bank moved. It goes
+   through the same Cloudflare Worker the rest of the site uses, so no key
+   ever reaches the browser, and it is the only feature here that needs one —
+   without it the page is entirely unaffected.                              */
+
+var INTEL_KEY = "rotasurf.intel.v1";
+var INTEL_TTL = 6 * 3600 * 1000;          /* matches the Worker's own cache */
+
+function cfg() {
+  var c = {};
+  try { c = JSON.parse(localStorage.getItem("rtf.cfg")) || {}; } catch (e) {}
+  return {
+    api: String(c.api || (window.TRIP_CONFIG && window.TRIP_CONFIG.API_BASE) || "").replace(/\/+$/, ""),
+    code: c.code || ""
+  };
+}
+
+function intelStore() {
+  try { return JSON.parse(localStorage.getItem(INTEL_KEY)) || {}; } catch (e) { return {}; }
+}
+function intelGet(id, date) {
+  var all = intelStore(), hit = all[id + "|" + date];
+  if (!hit || Date.now() - hit.at > INTEL_TTL) return null;
+  return hit;
+}
+function intelPut(id, date, data) {
+  var all = intelStore();
+  /* Keep it small: this is a convenience cache, not an archive. */
+  var keys = Object.keys(all);
+  if (keys.length > 24) keys.slice(0, keys.length - 24).forEach(function (k) { delete all[k]; });
+  all[id + "|" + date] = { at: Date.now(), text: data.text, model: data.model };
+  try { localStorage.setItem(INTEL_KEY, JSON.stringify(all)); } catch (e) {}
+}
+
+/* Turn the five LABEL: lines into rows; anything unexpected is shown as-is. */
+var INTEL_ROWS = {
+  WATER: "Water", FLAG: "Flags & boards", PARK: "Car park", SEA: "The sea", WATCH: "Watch out"
+};
+function intelHtml(text, model) {
+  var lines = String(text || "").split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
+  var rows = lines.map(function (l) {
+    var m = l.match(/^([A-Z][A-Z ]{2,14}):\s*(.+)$/);
+    if (!m || !INTEL_ROWS[m[1]]) return '<div class="rule"><p>' + esc(l) + '</p></div>';
+    return '<div class="rule"><b>' + esc(INTEL_ROWS[m[1]]) + '</b><p>' + esc(m[2]) + '</p></div>';
+  }).join("");
+  return rows + '<p class="foot">Asked of Claude with web search' +
+    (model ? ' (' + esc(model) + ')' : '') + ', cached for six hours. ' +
+    'It can be wrong or out of date — the tower and the flag on the beach are the authority.</p>';
+}
+
+function renderIntelCard(host, spot, sc) {
+  var card = el("section", "card intel");
+  var c = cfg();
+  var cachedHit = intelGet(spot.id, sc.date);
+  var head = '<div class="plan-head"><h3>Live check · ' + esc(spot.name) + '</h3>' +
+    '<button class="mini" id="intelCfg">settings</button></div>';
+
+  if (!c.api) {
+    card.innerHTML = head +
+      '<p class="foot">The rest of this page needs no key and never will. This one card asks Claude to ' +
+      'search the web for what the models cannot know at this beach — water quality and medusas, the flag ' +
+      'and tower situation today, the state of the car park, whether the bank has moved. It needs the ' +
+      'Cloudflare Worker that already powers Hike Finder and Range Rings on this site.</p>' +
+      '<div class="shrow"><button class="btn" id="intelSetup">Point it at my Worker</button></div>';
+    host.appendChild(card);
+    $("#intelSetup").addEventListener("click", openCfgDialog);
+    $("#intelCfg").addEventListener("click", openCfgDialog);
+    return;
+  }
+
+  if (cachedHit) {
+    card.innerHTML = head + intelHtml(cachedHit.text, cachedHit.model) +
+      '<div class="shrow"><button class="btn" id="intelGo">Check again ↻</button>' +
+      '<span class="foot">last checked ' + agoLabel(cachedHit.at) + '</span></div>';
+  } else {
+    card.innerHTML = head +
+      '<p class="foot">Water quality and medusas, today’s flag and tower situation, the car park, and ' +
+      'whether the bank has moved — the things four weather models cannot tell you.</p>' +
+      '<div class="shrow"><button class="btn btn-go" id="intelGo">Check this beach now</button></div>';
+  }
+  host.appendChild(card);
+  $("#intelCfg").addEventListener("click", openCfgDialog);
+  $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
+}
+
+function agoLabel(at) {
+  var m = Math.round((Date.now() - at) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + " min ago";
+  return Math.round(m / 60) + " h ago";
+}
+
+function askIntel(card, spot, sc) {
+  var c = cfg();
+  var head = '<div class="plan-head"><h3>Live check · ' + esc(spot.name) + '</h3>' +
+    '<button class="mini" id="intelCfg">settings</button></div>';
+  card.innerHTML = head + '<p class="intel-load"><span class="spinner sm"></span> Asking Claude to search the web…</p>';
+  $("#intelCfg").addEventListener("click", openCfgDialog);
+
+  var summary = mtr(sc.localHs) + " at " + (sc.tp == null ? "?" : Math.round(sc.tp) + " s") +
+    ", " + windLabel(sc, spot) + ", tide " + tideLabel(sc.tide) +
+    ", water " + (sc.sst == null ? "?" : r1(sc.sst) + " C");
+
+  fetch(c.api + "/api/surf", {
+    method: "POST",
+    headers: Object.assign({ "Content-Type": "application/json" }, c.code ? { "X-Trip-Code": c.code } : {}),
+    body: JSON.stringify({
+      name: spot.name, town: spot.town, summary: summary,
+      today: madridToday()
+    })
+  })
+  .then(function (r) {
+    if (r.status === 401) throw new Error("the Worker wants its access code");
+    if (!r.ok) throw new Error("the Worker answered " + r.status);
+    return r.json();
+  }, function () {
+    /* fetch() rejects with a bare "Failed to fetch" for DNS, CORS, a wrong
+       URL and being offline alike, which tells nobody anything. */
+    throw new Error("the Worker did not answer. Check the URL in settings, or you may be offline");
+  })
+  .then(function (d) {
+    if (d && d.text) {
+      intelPut(spot.id, sc.date, d);
+      card.innerHTML = head + intelHtml(d.text, d.model) +
+        '<div class="shrow"><button class="btn" id="intelGo">Check again ↻</button>' +
+        '<span class="foot">just now</span></div>';
+    } else {
+      card.innerHTML = head +
+        '<p>Live intel is not switched on for that Worker — it has no Anthropic key. ' +
+        'Everything else on this page works regardless.</p>' +
+        '<div class="shrow"><button class="btn" id="intelGo">Try again</button></div>';
+    }
+    $("#intelCfg").addEventListener("click", openCfgDialog);
+    $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
+  })
+  .catch(function (err) {
+    card.innerHTML = head + '<p>Could not reach the intel service — ' + esc(err.message) + '.</p>' +
+      '<div class="shrow"><button class="btn" id="intelGo">Try again</button>' +
+      '<button class="btn" id="intelSetup">Settings</button></div>';
+    $("#intelCfg").addEventListener("click", openCfgDialog);
+    $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
+    $("#intelSetup").addEventListener("click", openCfgDialog);
+  });
+}
+
+function openCfgDialog() {
+  var c = cfg();
+  $("#cfgApi").value = c.api;
+  $("#cfgCode").value = c.code;
+  $("#cfg").hidden = false;
+  $("#cfgApi").focus();
+}
+
 /* ═══════════════════════ deep links + the map ═══════════════════════ */
 
 var KEY_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
@@ -2261,6 +2420,23 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     render();
   });
+  /* live-check settings dialog */
+  $("#cfgClose").addEventListener("click", function () { $("#cfg").hidden = true; });
+  $("#cfgSave").addEventListener("click", function () {
+    try {
+      localStorage.setItem("rtf.cfg", JSON.stringify({
+        api: $("#cfgApi").value.trim().replace(/\/+$/, ""),
+        code: $("#cfgCode").value.trim()
+      }));
+    } catch (e) { /* private mode — the setting simply will not stick */ }
+    $("#cfg").hidden = true;
+    render();
+  });
+  $("#cfg").addEventListener("click", function (e) { if (e.target === $("#cfg")) $("#cfg").hidden = true; });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !$("#cfg").hidden) $("#cfg").hidden = true;
+  });
+
   var th = $("#themeBtn");
   if (th) th.addEventListener("click", function () {
     var cur = document.documentElement.getAttribute("data-theme");

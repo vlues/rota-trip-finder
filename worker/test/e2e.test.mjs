@@ -439,6 +439,49 @@ console.log('\nWorker end-to-end\n');
   ok('concierge: prompt pins Claude to the supplied listings');
 }
 
+/* --- live surf intel --- */
+{
+  installFetch({ 'api.anthropic.com': (u, i, reply) => reply(claudeReply(
+    'WATER: No bathing notices; scattered medusa reports off Conil this week.\n' +
+    'FLAG: Season runs to 15 Sep, towers 11:00-20:00, boards out of the buoyed zone.\n' +
+    'PARK: Dirt strip open, attendants charging 4 EUR at weekends.\n' +
+    'SEA: Bank has shifted south of the main access after last week swell.\n' +
+    'WATCH: Fiesta on Saturday fills the car park by 09:00.')) });
+  const r = await req('/api/surf', {
+    name: 'Playa de El Palmar', town: 'Vejer de la Frontera',
+    summary: '1.1 m at 8 s, 20 kn E offshore, low tide', today: '2026-09-11',
+  });
+  const d = await r.json();
+  assert.equal(d.demo, false);
+  assert.match(d.text, /^WATER:/);
+  assert.equal(d.text.split('\n').length, 5);
+
+  const sent = JSON.parse(calls.find((c) => c.url.includes('anthropic')).body);
+  // the beach and the date reach Claude, and the forecast is passed for contradiction-checking
+  assert.match(sent.messages[0].content, /Playa de El Palmar/);
+  assert.match(sent.messages[0].content, /Vejer de la Frontera/);
+  assert.match(sent.messages[0].content, /2026-09-11/);
+  assert.match(sent.messages[0].content, /20 kn E offshore/);
+  // it must be told NOT to re-report the numbers the page already has
+  assert.match(sent.system, /Do not restate them/);
+  assert.match(sent.system, /Never invent a closure/);
+  // web search has to actually be switched on, or this is just recall
+  assert.ok(sent.tools.some((t) => t.name === 'web_search'), 'web_search tool is attached');
+  ok('surf intel: searches the web, is pinned off the forecast, returns five lines');
+}
+
+/* --- live surf intel degrades without a key --- */
+{
+  installFetch();
+  const r = await req('/api/surf', { name: 'Playa de la Costilla' },
+    { env: { ALLOWED_ORIGINS: 'https://parker.github.io' }, code: undefined });
+  const d = await r.json();
+  assert.equal(d.demo, true);
+  assert.equal(d.text, null);
+  assert.equal(calls.filter((c) => c.url.includes('anthropic')).length, 0);
+  ok('surf intel: no Claude key means a clean demo response, not an error');
+}
+
 /* --- unknown route --- */
 {
   installFetch();

@@ -11,6 +11,7 @@ The secrets-holding half. Root README has the full setup.
 | POST | `/api/plan`    | day-by-day area itinerary |
 | POST | `/api/intent`  | sentence → structured criteria |
 | POST | `/api/ai`      | concierge opinion over the current results |
+| POST | `/api/surf`    | live beach intel for Wave Watch — web search, cached 6 h |
 
 POST routes require `X-Trip-Code: <ACCESS_CODE>` when that secret is set.
 Any unconfigured provider degrades to demo data rather than erroring — the
@@ -22,6 +23,6 @@ Files:
 - `src/area.js` — the 15 curated Cádiz-province places and the itinerary builder
 
 ```bash
-npm test                      # 22 e2e + unit tests
+npm test                      # 24 e2e + unit tests
 node test/devserver.mjs 8787  # real worker, stubbed upstreams, plain HTTP
 ```

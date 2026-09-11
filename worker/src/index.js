@@ -9,6 +9,7 @@
  *   POST /api/stays    stay search
  *   POST /api/flights  flight search (Sky-Scrapper via RapidAPI; Amadeus if
  *                      you still have pre-decommission credentials)
+ *   POST /api/surf     live beach intel for Wave Watch (web search, cached 6 h)
  *   POST /api/plan     day-by-day area itinerary
  *   POST /api/ai       Claude concierge over the current results
  *
@@ -559,6 +560,46 @@ TRAIL: current condition — water level, snow, mud, damage, works, heat or fire
 WATCH: the one thing that would ruin the day if they did not know it.
 If the web gives you nothing recent for a line, say what is normally true for this time of year and start that line with "Usually". Never invent a closure or a price. No preamble, no links, no markdown.`;
 
+const SURF_SYSTEM = `You are the live-intel card inside "Rota Wave Watch", used by a bodyboarder driving out from Rota, Spain to a named beach on the Cádiz coast.
+
+The page ALREADY has the numbers — wave height, period, swell direction, wind, tide, sea temperature — from four weather models. Do not restate them and do not give a wave forecast. Your job is the things a weather model cannot know, found by searching the web for what is true RIGHT NOW at that specific beach: municipal and Junta de Andalucía notices, town hall pages, local news, beach-flag and water-quality services, jellyfish reports, surf shops and school pages, recent local posts.
+
+Reply with exactly 5 short lines, plain text, each under 25 words, in this form:
+WATER: current water quality — any vertido, contamination notice or bathing ban, and any medusa (jellyfish) reports on this stretch this week.
+FLAG: the lifeguard and flag situation now — season dates in force, tower hours, and whether boards are actually being restricted inside the buoyed zone.
+PARK: anything current about the car park or access road — works, closures, charges, or an event or fiesta that will fill it.
+SEA: what people who were actually there this week say it has been doing — sandbanks, a shifted bank, unusual current, seaweed.
+WATCH: the one thing that would ruin the session if he did not know it.
+
+Rules: if the web gives you nothing recent for a line, say what is normally true for this beach at this time of year and start that line with "Usually". Never invent a closure, a price, a ban or a jellyfish report. If something you find contradicts the forecast summary you are given, say so in WATCH. No preamble, no links, no markdown.`;
+
+async function surfIntel(body, env) {
+  const model = env.CLAUDE_MODEL || DEFAULT_MODEL;
+  const beach = [body.name, body.town, 'Cádiz', 'Spain'].filter(Boolean).join(', ').slice(0, 200);
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model, max_tokens: 1500, system: SURF_SYSTEM,
+      tools: [webSearchTool(model, 5)],
+      messages: [{
+        role: 'user',
+        content: `Beach: ${beach}.`
+          + (body.summary ? ` What our models say for the session being planned: ${String(body.summary).slice(0, 240)}.` : '')
+          + ` Today: ${body.today || 'unknown'}. The five lines, please.`,
+      }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  const text = (data.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
+  return { demo: false, text, model };
+}
+
 async function trailIntel(body, env) {
   const model = env.CLAUDE_MODEL || DEFAULT_MODEL;
   const trail = [body.name, body.area, body.province, body.country || 'Spain'].filter(Boolean).join(', ').slice(0, 200);
@@ -750,6 +791,16 @@ export default {
           /* Conditions move week to week, so the cache key carries the date. */
           const key = 'trail:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 10);
           return json(await cached(key, 12 * 3600, () => trailIntel(body, env)), request, env);
+        }
+        case '/api/surf': {
+          if (!env.ANTHROPIC_API_KEY) {
+            return json({ demo: true, text: null }, request, env);
+          }
+          /* Beach conditions move faster than trail conditions, and the flag
+             and jellyfish lines are same-day facts — so the cache key carries
+             the date and the entry only lives six hours. */
+          const key = 'surf:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 10);
+          return json(await cached(key, 6 * 3600, () => surfIntel(body, env)), request, env);
         }
         case '/api/rings-filter': {
           if (!env.ANTHROPIC_API_KEY) return json({ demo: true, criteria: null }, request, env);
