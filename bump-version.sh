@@ -16,10 +16,14 @@ root = pathlib.Path(".")
 (root / "version.json").write_text(json.dumps({"v": V}) + "\n")
 
 PAGES = ["index.html", "hikes/index.html", "rings/index.html", "surf/index.html"]
-# local scripts that must never be paired across builds
-LOCAL = r"(?:app|data|config|build-check)\.js"
+# Local assets that must never be paired across builds. Stylesheets count:
+# they are cached exactly like the scripts, and a page wearing last build's
+# CSS is just as broken as one running last build's JS.
+LOCAL_JS = r"(?:app|data|config|build-check)\.js"
+LOCAL_CSS = r"(?:app|style|styles)\.css"
 meta_re = re.compile(r'(<meta name="app-version" content=")[^"]*(")')
-src_re = re.compile(r'(src=")((?:\.{1,2}/)*' + LOCAL + r')(\?v=[^"]*)?(")')
+src_re = re.compile(r'(src=")((?:\.{1,2}/)*' + LOCAL_JS + r')(\?v=[^"]*)?(")')
+css_re = re.compile(r'(href=")((?:\.{1,2}/)*' + LOCAL_CSS + r')(\?v=[^"]*)?(")')
 
 for f in PAGES:
     p = root / f
@@ -28,8 +32,9 @@ for f in PAGES:
     s = p.read_text()
     s, n_meta = meta_re.subn(lambda m: m.group(1) + V + m.group(2), s)
     s, n_src = src_re.subn(lambda m: m.group(1) + m.group(2) + "?v=" + V + m.group(4), s)
+    s, n_css = css_re.subn(lambda m: m.group(1) + m.group(2) + "?v=" + V + m.group(4), s)
     p.write_text(s)
-    print(f"  ✓ {f}  ({n_meta} stamp, {n_src} scripts)")
+    print(f"  ✓ {f}  ({n_meta} stamp, {n_src} js, {n_css} css)")
 
 print(f"stamped {V}")
 PY
