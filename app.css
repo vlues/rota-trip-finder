@@ -383,8 +383,10 @@ a.txt, a.txt:hover { color: inherit; }
 }
 .tool span:not(.tool-ico) { font-size: 12.5px; line-height: 1.45; color: var(--color-neutral-800); }
 .tool em {
-  position: absolute; top: var(--space-2); right: var(--space-3);
+  position: absolute; top: var(--space-3); right: var(--space-3);
   font-style: normal; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
   color: var(--color-neutral-600);
 }
+/* the badge is absolutely positioned, so the heading has to keep clear of it */
+.tool-here b { padding-right: 92px; }
 .tool-here { opacity: .82; }
