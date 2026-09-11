@@ -439,6 +439,17 @@ console.log('\nWorker end-to-end\n');
   ok('concierge: prompt pins Claude to the supplied listings');
 }
 
+/* --- health advertises what this build can do --- */
+{
+  installFetch();
+  const r = await req('/api/health', null, { method: 'GET' });
+  const d = await r.json();
+  assert.ok(Array.isArray(d.routes), 'health lists its routes');
+  assert.ok(d.routes.includes('/api/surf'), 'surf route is advertised');
+  assert.equal(d.accessCodeRequired, true);
+  ok('health: lists routes, so a deploy is verifiable without the access code');
+}
+
 /* --- live surf intel --- */
 {
   installFetch({ 'api.anthropic.com': (u, i, reply) => reply(claudeReply(

@@ -744,7 +744,10 @@ export default {
 
     if (url.pathname === '/api/health') {
       const { name, def } = providerFor(env);
-      return json({
+      /* Health is a GET, so Cloudflare's edge will happily cache it — and a
+         stale "ai: off" would keep telling someone to add a key they have
+         just added. This one answer must always be current. */
+      const health = json({
         ok: true,
         providers: {
           stays: staysConfigured(env) ? def.label : 'demo',
@@ -754,7 +757,18 @@ export default {
         },
         stayProvider: name,
         accessCodeRequired: Boolean(env.ACCESS_CODE),
+        /* Every POST route sits behind the access code, so without this there
+           is no way to tell a Worker running old code from a wrong passphrase —
+           both answer 401. Listing them here, on the one ungated endpoint,
+           makes a deploy verifiable by anyone. */
+        routes: [
+          '/api/stays', '/api/flights', '/api/plan', '/api/intent',
+          '/api/spot', '/api/trail', '/api/surf', '/api/rings-filter',
+          '/api/ai', '/api/diag',
+        ],
       }, request, env);
+      health.headers.set('Cache-Control', 'no-store');
+      return health;
     }
 
     if (env.ACCESS_CODE && request.headers.get('X-Trip-Code') !== env.ACCESS_CODE) {

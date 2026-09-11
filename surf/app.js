@@ -1865,6 +1865,22 @@ function cfg() {
   };
 }
 
+/* The Worker's /api/health is deliberately not behind the access code, so the
+   page can find out what is actually missing before asking for anything. That
+   turns "fill in these two boxes" into "it needs the code you already set". */
+var healthCache = null;
+function probeHealth() {
+  var c = cfg();
+  if (!c.api) return Promise.resolve(null);
+  if (healthCache && healthCache.api === c.api) return Promise.resolve(healthCache.data);
+  /* Belt and braces with the Worker's own no-store header: a stale health
+     answer would misreport what is configured. */
+  return fetch(c.api + "/api/health?t=" + Math.floor(Date.now() / 600000), { cache: "no-store" })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .catch(function () { return null; })
+    .then(function (d) { healthCache = { api: c.api, data: d }; return d; });
+}
+
 function intelStore() {
   try { return JSON.parse(localStorage.getItem(INTEL_KEY)) || {}; } catch (e) { return {}; }
 }
@@ -1898,6 +1914,9 @@ function intelHtml(text, model) {
     'It can be wrong or out of date — the tower and the flag on the beach are the authority.</p>';
 }
 
+var INTEL_BLURB = 'Water quality and medusas, today’s flag and tower situation, the car park, and ' +
+  'whether the bank has moved — the things four weather models cannot tell you.';
+
 function renderIntelCard(host, spot, sc) {
   var card = el("section", "card intel");
   var c = cfg();
@@ -1908,13 +1927,32 @@ function renderIntelCard(host, spot, sc) {
   if (!c.api) {
     card.innerHTML = head +
       '<p class="foot">The rest of this page needs no key and never will. This one card asks Claude to ' +
-      'search the web for what the models cannot know at this beach — water quality and medusas, the flag ' +
-      'and tower situation today, the state of the car park, whether the bank has moved. It needs the ' +
-      'Cloudflare Worker that already powers Hike Finder and Range Rings on this site.</p>' +
+      'search the web for what the models cannot know at this beach. It needs the Cloudflare Worker that ' +
+      'already powers Hike Finder and Range Rings on this site.</p>' +
       '<div class="shrow"><button class="btn" id="intelSetup">Point it at my Worker</button></div>';
     host.appendChild(card);
     $("#intelSetup").addEventListener("click", openCfgDialog);
     $("#intelCfg").addEventListener("click", openCfgDialog);
+    return;
+  }
+
+  /* Configured but not yet usable: find out which, and ask only for that. */
+  if (!cachedHit && !c.code) {
+    card.innerHTML = head + '<p class="intel-load"><span class="spinner sm"></span> Checking the Worker…</p>';
+    host.appendChild(card);
+    $("#intelCfg").addEventListener("click", openCfgDialog);
+    probeHealth().then(function (h) {
+      if (!document.body.contains(card)) return;
+      if (h && h.accessCodeRequired) { codePrompt(card, head, spot, sc, h, null); return; }
+      if (h && h.providers && h.providers.ai === "off") {
+        card.innerHTML = head +
+          '<p>Your Worker is live, but it has no Anthropic key, so live intel is switched off. ' +
+          'Run <code>./setup-api.sh</code> from the repo once to add one — the key stays a Cloudflare ' +
+          'secret and never reaches this page.</p>';
+        return;
+      }
+      readyCard(card, head, spot, sc);
+    });
     return;
   }
 
@@ -1931,6 +1969,43 @@ function renderIntelCard(host, spot, sc) {
   host.appendChild(card);
   $("#intelCfg").addEventListener("click", openCfgDialog);
   $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
+}
+
+/* Everything is in place — just offer the button. */
+function readyCard(card, head, spot, sc) {
+  card.innerHTML = head + '<p class="foot">' + INTEL_BLURB + '</p>' +
+    '<div class="shrow"><button class="btn btn-go" id="intelGo">Check this beach now</button></div>';
+  $("#intelCfg").addEventListener("click", openCfgDialog);
+  $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
+}
+
+/* The Worker is up and Claude is on; the only missing piece is the shared
+   passphrase, so ask for that one thing inline rather than opening a dialog
+   with two boxes in it. */
+function codePrompt(card, head, spot, sc, h, err) {
+  card.innerHTML = head +
+    (err ? '<p class="plan-warn">' + esc(err) + '</p>' : '') +
+    '<p class="foot">The Worker is live and Claude is switched on' +
+      (h && h.providers ? ' (' + esc(h.providers.ai) + ')' : '') +
+      '. It just wants the access code you set when you deployed it — the shared passphrase that stops ' +
+      'strangers spending your quota. Enter it once and Hike Finder and Range Rings will use it too.</p>' +
+    '<label class="field">Access code<input id="intelCode" class="input" type="password" ' +
+      'autocomplete="off" placeholder="the passphrase you chose"></label>' +
+    '<div class="shrow"><button class="btn btn-go" id="intelCodeSave">Save and check</button>' +
+    '<button class="mini" id="intelCfg2">other settings</button></div>';
+  $("#intelCfg").addEventListener("click", openCfgDialog);
+  $("#intelCfg2").addEventListener("click", openCfgDialog);
+  var save = function () {
+    var code = $("#intelCode").value.trim();
+    if (!code) return;
+    var cur = cfg();
+    try {
+      localStorage.setItem("rtf.cfg", JSON.stringify({ api: cur.api, code: code }));
+    } catch (e) { /* private mode */ }
+    askIntel(card, spot, sc);
+  };
+  $("#intelCodeSave").addEventListener("click", save);
+  $("#intelCode").addEventListener("keydown", function (e) { if (e.key === "Enter") save(); });
 }
 
 function agoLabel(at) {
@@ -1984,6 +2059,12 @@ function askIntel(card, spot, sc) {
     $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
   })
   .catch(function (err) {
+    if (/access code/i.test(err.message)) {
+      probeHealth().then(function (h) {
+        codePrompt(card, head, spot, sc, h, "That code was not accepted. Try again.");
+      });
+      return;
+    }
     card.innerHTML = head + '<p>Could not reach the intel service — ' + esc(err.message) + '.</p>' +
       '<div class="shrow"><button class="btn" id="intelGo">Try again</button>' +
       '<button class="btn" id="intelSetup">Settings</button></div>';
