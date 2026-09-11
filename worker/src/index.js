@@ -571,7 +571,36 @@ PARK: anything current about the car park or access road — works, closures, ch
 SEA: what people who were actually there this week say it has been doing — sandbanks, a shifted bank, unusual current, seaweed.
 WATCH: the one thing that would ruin the session if he did not know it.
 
-Rules: if the web gives you nothing recent for a line, say what is normally true for this beach at this time of year and start that line with "Usually". Never invent a closure, a price, a ban or a jellyfish report. If something you find contradicts the forecast summary you are given, say so in WATCH. No preamble, no links, no markdown.`;
+Rules: if the web gives you nothing recent for a line, say what is normally true for this beach at this time of year and start that line with "Usually". Never invent a closure, a price, a ban or a jellyfish report. If something you find contradicts the forecast summary you are given, say so in WATCH.
+
+Format, strictly: five lines and nothing else. Do not narrate your searching, do not say what you are about to do, do not summarise afterwards. Each line is one single line — never break one across several lines. No preamble, no links, no markdown, no bullet characters.`;
+
+/* Claude narrates its searching, and web-search citations arrive with their own
+   line breaks inside them, so the five lines come back wrapped in prose and
+   split across a dozen rows. Rebuild them: drop anything before the first
+   label, and collapse each label's block back onto one line. */
+const INTEL_LABELS = ['WATER', 'FLAG', 'PARK', 'SEA', 'WATCH'];
+export function tidyIntel(raw) {
+  const text = String(raw || '').replace(/\r/g, '');
+  const found = INTEL_LABELS
+    .map((label) => ({ label, at: text.search(new RegExp(`(^|\\n)\\s*${label}\\s*:`)) }))
+    .filter((x) => x.at >= 0)
+    .sort((a, b) => a.at - b.at);
+  if (!found.length) return text.trim();
+
+  return found.map((cur, i) => {
+    const next = found[i + 1];
+    const block = text.slice(cur.at, next ? next.at : undefined);
+    const body = block
+      .replace(new RegExp(`^\\s*${cur.label}\\s*:`), '')
+      .replace(/\s*\n+\s*/g, ' ')     // citations bring their own newlines
+      .replace(/\s+/g, ' ')
+      .replace(/\s+([;,.])/g, '$1')   // "text \n ; more" -> "text; more"
+      .replace(/^[\s;,.-]+/, '')
+      .trim();
+    return body ? `${cur.label}: ${body}` : null;
+  }).filter(Boolean).join('\n');
+}
 
 async function surfIntel(body, env) {
   const model = env.CLAUDE_MODEL || DEFAULT_MODEL;
@@ -597,7 +626,7 @@ async function surfIntel(body, env) {
   if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const data = await res.json();
   const text = (data.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
-  return { demo: false, text, model };
+  return { demo: false, text: tidyIntel(text), model };
 }
 
 async function trailIntel(body, env) {
@@ -813,7 +842,9 @@ export default {
           /* Beach conditions move faster than trail conditions, and the flag
              and jellyfish lines are same-day facts — so the cache key carries
              the date and the entry only lives six hours. */
-          const key = 'surf:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 10);
+          /* v2: the stored shape changed when the five lines started being
+             rebuilt, so old entries must not be served. */
+          const key = 'surf:v2:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 10);
           return json(await cached(key, 6 * 3600, () => surfIntel(body, env)), request, env);
         }
         case '/api/rings-filter': {
@@ -840,4 +871,4 @@ export default {
   },
 };
 
-export const __test = { nightsBetween, demoStays, demoFlights, normalizeFlight, searchStays, searchFlights, diagnose, makePlan };
+export const __test = { nightsBetween, demoStays, demoFlights, normalizeFlight, searchStays, searchFlights, diagnose, makePlan, tidyIntel };

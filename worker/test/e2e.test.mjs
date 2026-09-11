@@ -8,7 +8,7 @@
  * normalization and error handling all execute for real.
  */
 import assert from 'node:assert/strict';
-import worker from '../src/index.js';
+import worker, { __test } from '../src/index.js';
 
 let calls = [];
 const realFetch = globalThis.fetch;
@@ -448,6 +448,40 @@ console.log('\nWorker end-to-end\n');
   assert.ok(d.routes.includes('/api/surf'), 'surf route is advertised');
   assert.equal(d.accessCodeRequired, true);
   ok('health: lists routes, so a deploy is verifiable without the access code');
+}
+
+/* --- the five lines survive Claude narrating and citing --- */
+{
+  const messy = [
+    'I need to search for more current information about water quality.',
+    '',
+    'Based on my search results, I can now provide the five lines requested:',
+    '',
+    'WATER: ',
+    'Q-quality certification renewed this year',
+    '; no vertido notices found.',
+    '',
+    'FLAG: ',
+    'Lifeguard season active until 25 September',
+    '; boards permitted outside buoyed zones.',
+    '',
+    'PARK: New free parking opened this summer',
+    '; ',
+    'pasarela repairs completed',
+    '; access open.',
+    '',
+    'SEA: Usually sandbanks shift weekly after south swells.',
+    '',
+    'WATCH: Season ends 13 September but lifeguards work until 25th.',
+  ].join('\n');
+  const out = __test.tidyIntel(messy);
+  const lines = out.split('\n');
+  assert.equal(lines.length, 5, 'exactly five lines survive');
+  assert.ok(!/search results|I need to/.test(out), 'the narration is gone');
+  assert.match(lines[0], /^WATER: Q-quality certification renewed this year; no vertido/);
+  assert.match(lines[2], /^PARK: New free parking opened this summer; pasarela repairs completed; access open\.$/);
+  assert.match(lines[4], /^WATCH: /);
+  ok('surf intel: narration and citation line breaks are rebuilt into five lines');
 }
 
 /* --- live surf intel --- */

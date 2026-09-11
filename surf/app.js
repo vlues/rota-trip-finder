@@ -705,6 +705,7 @@ var S = {
   sel: null,           /* {spotId, key} chosen from the grid or chart */
   filters: { boards: false, beginner: false, freePark: false, noRocks: false },
   plan: null,          /* the last "just tell me" answer, kept across re-renders */
+  health: undefined,   /* undefined = not asked yet, null = could not ask */
   bar: 62,             /* the score you personally think is worth the drive */
   err: null
 };
@@ -1878,7 +1879,11 @@ function probeHealth() {
   return fetch(c.api + "/api/health?t=" + Math.floor(Date.now() / 600000), { cache: "no-store" })
     .then(function (r) { return r.ok ? r.json() : null; })
     .catch(function () { return null; })
-    .then(function (d) { healthCache = { api: c.api, data: d }; return d; });
+    .then(function (d) {
+      healthCache = { api: c.api, data: d };
+      S.health = d;
+      return d;
+    });
 }
 
 function intelStore() {
@@ -2388,6 +2393,31 @@ function renderHeader() {
   }
 }
 
+/* Live check is the last thing left to switch on, and its card sits six
+   sections down the page. Until the code is in, say so at the top — and the
+   moment it is in, this never appears again. */
+function renderSetupBar() {
+  var bar = $("#setupBar");
+  if (!bar) return;
+  var c = cfg();
+  var need = c.api && !c.code && S.health && S.health.accessCodeRequired &&
+             !(S.health.providers && S.health.providers.ai === "off");
+  if (!need) { bar.hidden = true; bar.innerHTML = ""; return; }
+  bar.hidden = false;
+  bar.innerHTML = '<button id="setupGo">' +
+    '<b>Finish setup</b> — Live check needs the access code you chose. One tap, once.' +
+    '<span aria-hidden="true">→</span></button>';
+  $("#setupGo").addEventListener("click", function () {
+    if (S.view !== "now") setView("now");
+    setTimeout(function () {
+      var card = $(".intel");
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+      var input = $("#intelCode");
+      if (input) setTimeout(function () { input.focus(); }, 420);
+    }, 60);
+  });
+}
+
 function setView(v) {
   S.view = v;
   $$(".tab").forEach(function (t) { t.classList.toggle("on", t.getAttribute("data-view") === v); });
@@ -2400,6 +2430,7 @@ function render() {
   if (!S.model) return;
   writeHash();
   renderHeader();
+  renderSetupBar();
   if (S.view === "now") renderNow();
   else if (S.view === "grid") renderGrid();
   else if (S.view === "spots") renderSpots();
@@ -2442,6 +2473,8 @@ function boot() {
     $("#boot").classList.add("hidden");
     $("#app").classList.remove("hidden");
     render();
+    /* Find out what the Worker still needs, then let the bar decide. */
+    if (S.health === undefined) probeHealth().then(function () { renderSetupBar(); });
   }).catch(function (e) {
     if (S.model) {              /* the cached copy is already on screen */
       S.model.stale = true;

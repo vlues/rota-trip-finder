@@ -44,7 +44,7 @@ window.__SURF_SPOTS__ = [
   crowd: "Busy in summer, empty in winter"
 },
 {
-  id: "candor", name: "Punta Candor / El Rompidillo", town: "Rota", zone: "Rota",
+  id: "candor", name: "Punta Candor", town: "Rota", zone: "Rota",
   lat: 36.6389, lon: -6.3923, mlat: 36.6375, mlon: -6.4427,
   face: 268, win: [235, 315], off: 88, exposure: 0.62,
   type: "reef + sand", bottom: "flat rock shelf and sand", best: { min: 0.7, max: 2.0, ideal: 1.2 },
@@ -64,7 +64,7 @@ window.__SURF_SPOTS__ = [
     walk: "5 min through the pines", note: "Unsurfaced and rutted — fine for a normal car in summer, puddled and soft after winter rain. Nothing is watched here, so leave nothing visible in the boot."
   },
   kit: ["Fin tethers — losing one over the shelf ends the session", "Reef booties if you are unsure of the tide"],
-  why: "The most exposed corner of Rota and the closest thing to a proper wave inside the town limits. Faces properly west, so it picks up swell the bay beaches never see.",
+  why: "The most exposed corner of Rota and the closest thing to a proper wave inside the town limits. Faces properly west, so it picks up swell the bay beaches never see. Not to be confused with Playa del Rompidillo, which is the sheltered beach back by the harbour and almost never breaks.",
   tip: "Surf it on the top half of the tide, always. The corrales are historic stone weirs and they do not move — at low water you are standing on them.",
   crowd: "A handful of locals"
 },

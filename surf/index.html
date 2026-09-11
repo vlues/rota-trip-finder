@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#F2F7F9" media="(prefers-color-scheme:light)">
 <meta name="theme-color" content="#071620" media="(prefers-color-scheme:dark)">
 <title>Rota Wave Watch</title>
-<meta name="app-version" content="20260911163122">
+<meta name="app-version" content="20260911164409">
 <meta name="description" content="Live bodyboarding conditions for Rota and the Gulf of Cádiz — when to go, where to park, what to wear, and whether boards are allowed.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -386,6 +386,14 @@ details[open]>summary:before{content:"▾ "}
   border-radius:9px;padding:9px 10px;font-size:15px;color:var(--ink)}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 
+
+/* ───────────────────── one-time setup bar ───────────────────── */
+.setupbar{position:sticky;top:0;z-index:45;background:var(--amber-b);color:#1A1206}
+.setupbar button{display:flex;align-items:center;gap:8px;width:100%;padding:9px 14px;
+  font-size:12.5px;line-height:1.35;color:inherit;max-width:720px;margin:0 auto}
+.setupbar b{font-weight:700}
+.setupbar span{margin-left:auto;font-weight:700}
+
 /* ───────────────────────────── tabs ───────────────────────────── */
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--panel);
   border-top:1px solid var(--line);padding:6px 8px calc(6px + var(--sab));
@@ -424,6 +432,8 @@ details[open]>summary:before{content:"▾ "}
   <div id="whenBar"></div>
  </div>
 </header>
+
+<div id="setupBar" class="setupbar" hidden></div>
 
 <div id="boot">
   <div class="spinner"></div>
@@ -480,7 +490,7 @@ details[open]>summary:before{content:"▾ "}
 <!-- Shared, secret-free build config: carries the deployed Worker URL so Live
      check needs no per-device setup. Same file the other sub-apps use. -->
 <script src="../config.js"></script>
-<script src="./data.js?v=20260911163122"></script>
-<script src="./app.js?v=20260911163122"></script>
+<script src="./data.js?v=20260911164409"></script>
+<script src="./app.js?v=20260911164409"></script>
 </body>
 </html>
