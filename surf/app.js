@@ -19,7 +19,7 @@ var KIT   = window.__SURF_KIT__ || [];
 var RULES = window.__SURF_RULES__ || {};
 var LORE  = window.__SURF_LORE__ || [];
 
-var DAYS = 7;
+var DAYS = 10;   /* the marine models reach ten days; confidence decays to match */
 var TZ = "Europe/Madrid";
 var CACHE_KEY = "rotasurf.v1";
 var CACHE_MAX_AGE = 60 * 60 * 1000;      /* an hour — the models update every 3–6 h */
@@ -139,9 +139,16 @@ function loadAll() {
     var out = { at: Date.now(), sources: {} };
     rs.forEach(function (r) { out.sources[r.id] = r; });
     if (!out.sources.marine.ok || !out.sources.atmo.ok) {
+      /* A cached forecast is worth showing when the network is down, but only
+         while it still covers the present — past about three days its window
+         has run out and it would be describing a week that has already been. */
       var cached = readCache();
-      if (cached) { cached.stale = true; return cached; }
-      throw new Error(out.sources.marine.err || out.sources.atmo.err);
+      if (cached && Date.now() - cached.at < 72 * 3600 * 1000) {
+        cached.stale = true;
+        return cached;
+      }
+      throw new Error(out.sources.marine.err || out.sources.atmo.err ||
+        "Both forecast services are unreachable.");
     }
     writeCache(out);
     return out;
@@ -180,9 +187,31 @@ function seriesFor(res, i, pick) {
 }
 
 /* Tide arrives as height above mean sea level. What matters for surf is where
-   you are between this tide's own low and high, and which way it is going —
-   so normalise against a rolling 13-hour window (a bit over one full cycle). */
-function tideState(times, map, idx) {
+   you sit between this tide's own low and high, and which way it is going.
+
+   Measuring that against the bracketing turning points — rather than against
+   a rolling window of hours — is both more accurate and safe at the ends of
+   the forecast, where a window runs out of samples and quietly biases the
+   answer towards whichever half-cycle it happened to catch. */
+function tideStateAt(tides, times, map, idx) {
+  var key = times[idx];
+  var cur = map[key] ? map[key].sea_level_height_msl : null;
+  var stamp = key.slice(0, 13) + ":00";
+  var j = 0;
+  while (j < tides.length && tides[j].stamp < stamp) j++;
+  var nx = tides[j] || null, pv = tides[j - 1] || null;
+
+  if (cur != null && nx && pv) {
+    var lo = Math.min(pv.m, nx.m), hi = Math.max(pv.m, nx.m), rng = hi - lo;
+    if (rng >= 0.05) {
+      return { t: clamp((cur - lo) / rng, 0, 1), rising: nx.type === "high", m: cur, range: rng };
+    }
+  }
+  return tideStateWindow(times, map, idx);   /* the ends of the series */
+}
+
+/* Fallback for hours with no turning point on one side of them. */
+function tideStateWindow(times, map, idx) {
   var lo = Infinity, hi = -Infinity, i;
   for (i = Math.max(0, idx - 6); i <= Math.min(times.length - 1, idx + 6); i++) {
     var v = map[times[i]] && map[times[i]].sea_level_height_msl;
@@ -190,9 +219,43 @@ function tideState(times, map, idx) {
     if (v < lo) lo = v; if (v > hi) hi = v;
   }
   var cur = map[times[idx]] ? map[times[idx]].sea_level_height_msl : null;
-  if (cur == null || !isFinite(lo) || hi - lo < 0.05) return { t: 0.5, rising: true, m: cur, range: hi - lo };
+  var range = isFinite(hi - lo) ? hi - lo : 0;
+  if (cur == null || !isFinite(lo) || range < 0.05) {
+    return { t: 0.5, rising: true, m: cur, range: range };
+  }
   var prev = idx > 0 && map[times[idx - 1]] ? map[times[idx - 1]].sea_level_height_msl : cur;
-  return { t: clamp((cur - lo) / (hi - lo), 0, 1), rising: cur >= prev, m: cur, range: hi - lo };
+  return { t: clamp((cur - lo) / range, 0, 1), rising: cur >= prev, m: cur, range: range };
+}
+
+/* ── first and last usable light ────────────────────────────────────────
+   Open-Meteo gives sunrise and sunset but not civil twilight, and twilight
+   is the half-hour that decides whether a dawn session is on — especially in
+   summer, when getting in before the lifeguard towers open is the whole plan.
+
+   Rather than recompute sunrise from scratch and risk disagreeing with the
+   API about it, this works out only the *gap* between the sun at -0.833°
+   (sunrise) and at -6° (civil twilight) and adds it either side of the
+   API's own times. A difference of two hour angles needs no time zone and
+   no Julian dates, so there is nothing here to get wrong twice. */
+function solarDeclination(date) {
+  var p = date.split("-"), y = +p[0], mo = +p[1], d = +p[2];
+  var N = Math.floor((Date.UTC(y, mo - 1, d) - Date.UTC(y, 0, 0)) / 86400000);
+  var g = 2 * Math.PI / 365 * (N - 1);
+  return 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g)
+       - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g)
+       - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+}
+function twilightMinutes(date, lat) {
+  var dec = solarDeclination(date), phi = lat * Math.PI / 180;
+  var H = function (deg) {
+    var h = deg * Math.PI / 180;
+    var c = (Math.sin(h) - Math.sin(phi) * Math.sin(dec)) / (Math.cos(phi) * Math.cos(dec));
+    if (c > 1 || c < -1) return null;
+    return Math.acos(c);
+  };
+  var a = H(-0.833), b = H(-6);
+  if (a == null || b == null) return 30;
+  return clamp(Math.round((b - a) * 1440 / (2 * Math.PI)), 15, 70);
 }
 
 /* Sunrise/sunset for the day, as minutes past midnight local. */
@@ -200,8 +263,15 @@ function sunFor(daily, date) {
   if (!daily || !daily.time) return { up: 7 * 60 + 30, down: 21 * 60 };
   var i = daily.time.indexOf(date);
   if (i < 0) return { up: 7 * 60 + 30, down: 21 * 60 };
-  var mins = function (s) { return s ? (+s.slice(11, 13)) * 60 + (+s.slice(14, 16)) : null; };
-  return { up: mins(daily.sunrise[i]) || 450, down: mins(daily.sunset[i]) || 1260 };
+  var mins = function (v) {
+    if (!v) return null;
+    var h = +v.slice(11, 13), m = +v.slice(14, 16);
+    return isFinite(h) && isFinite(m) ? h * 60 + m : null;
+  };
+  var up = mins(daily.sunrise[i]), down = mins(daily.sunset[i]);
+  up = up == null ? 450 : up;
+  down = down == null ? 1260 : down;
+  return { up: up, down: down };
 }
 
 /* ─────────────────────────── the scoring model ───────────────────────────
@@ -320,6 +390,9 @@ function scoreHour(spot, m, a, st, sun, hour) {
   return {
     score: clamp(Math.round(score), 0, 100),
     localHs: localHs, offshoreHs: hs, tp: tp, swellDir: swellDir,
+    /* the two halves of the sea state, kept apart: one you can ride, one
+       is just the local wind roughing up the surface */
+    swellH: sw, swellT: m.swell_wave_period, windWaveH: ww, windWaveT: m.wind_wave_period,
     wind: a.wind_speed_10m, windDir: a.wind_direction_10m, gust: a.wind_gusts_10m,
     airT: a.temperature_2m, sst: m.sea_surface_temperature, uv: a.uv_index,
     rain: a.precipitation, rainP: a.precipitation_probability, cloud: a.cloud_cover,
@@ -340,6 +413,7 @@ function buildModel(raw) {
     var M = seriesFor(marine, i, null), A = seriesFor(atmo, i, null);
     if (!M || !A) return;
     var WS = seriesFor(wspread, i, null), NS = seriesFor(windspread, i, null);
+    var tides = tideExtremes(M.times, M.map);
     var rows = [];
     for (var t = 0; t < M.times.length; t++) {
       var key = M.times[t];
@@ -347,7 +421,7 @@ function buildModel(raw) {
       if (!m || !a) continue;
       var pk = parseKey(key);
       var sun = sunFor(A.daily, pk.date);
-      var st = tideState(M.times, M.map, t);
+      var st = tideStateAt(tides, M.times, M.map, t);
       var sc = scoreHour(spot, m, a, st, sun, pk.hour);
       if (!sc) continue;
       sc.key = key; sc.date = pk.date; sc.hour = pk.hour; sc.sun = sun;
@@ -373,36 +447,53 @@ function buildModel(raw) {
       rows.push(sc);
     }
     if (rows.length) {
-      out.spots.push({
-        spot: spot, rows: rows, byKey: index(rows),
-        tides: tideExtremes(M.times, M.map)
-      });
+      out.spots.push({ spot: spot, rows: rows, byKey: index(rows), tides: tides });
     }
   });
 
+  /* The union across every spot, not whichever one happened to land first —
+     a spot whose grid cell has gaps must not truncate the whole week. */
   if (out.spots.length) {
-    out.hours = out.spots[0].rows.map(function (r) { return r.key; });
-    var seen = {};
-    out.spots[0].rows.forEach(function (r) { if (!seen[r.date]) { seen[r.date] = 1; out.days.push(r.date); } });
+    var seenK = {};
+    out.spots.forEach(function (e) { e.rows.forEach(function (r) { seenK[r.key] = 1; }); });
+    out.hours = Object.keys(seenK).sort();          /* ISO strings sort chronologically */
+    var seenD = {};
+    out.hours.forEach(function (k) {
+      var d = k.slice(0, 10);
+      if (!seenD[d]) { seenD[d] = 1; out.days.push(d); }
+    });
   }
   return out;
 }
 function index(rows) { var m = {}; rows.forEach(function (r) { m[r.key] = r; }); return m; }
 
-/* Confidence from model spread plus how far out we are looking. */
+/* Confidence from model spread plus how far out we are looking. Wind counts
+   as well as wave height: a clean 1 m day and a blown-out 1 m day are the same
+   swell, and the wind models are the ones that disagree about which it will be.
+   The lead-time cut-offs are fractions of the forecast horizon, so they stay
+   right if the horizon changes. */
 function confidenceOf(sc, key) {
   var lead = out_leadHours(key);
+  var horizon = DAYS * 24;
   var base = sc && sc.spread != null ? sc.spread : null;
   var lvl;
   if (base == null) lvl = lead < 48 ? 2 : 1;
   else if (base < 0.18) lvl = 3;
   else if (base < 0.38) lvl = 2;
   else lvl = 1;
-  if (lead > 120 && lvl === 3) lvl = 2;
-  if (lead > 144 && lvl > 1) lvl = 1;
-  var why = base == null ? "one model only"
-      : Math.round(base * 100) + "% spread across three models";
-  return { level: lvl, label: ["", "Low", "Fair", "High"][lvl], why: why, lead: lead };
+
+  var windy = sc && sc.windSpread != null && sc.windSpread >= 8;
+  if (windy && lvl > 1) lvl--;
+  if (lead > horizon * 0.70 && lvl === 3) lvl = 2;
+  if (lead > horizon * 0.85 && lvl > 1) lvl = 1;
+
+  var parts = [];
+  parts.push(base == null ? "only one wave model reaches this far"
+    : Math.round(base * 100) + "% spread across three wave models");
+  if (sc && sc.windSpread != null) {
+    parts.push(Math.round(sc.windSpread) + " kn apart on wind");
+  }
+  return { level: lvl, label: ["", "Low", "Fair", "High"][lvl], why: parts.join(", "), lead: lead };
 }
 function out_leadHours(key) {
   var now = madridNowKey();
@@ -430,7 +521,7 @@ function suitFor(sst) {
   return SUITS[SUITS.length - 1];
 }
 function kitFor(sc, spot) {
-  var month = +madridToday().slice(5, 7);
+  var month = +(sc.date || madridToday()).slice(5, 7);
   var ctx = {
     hs: sc.localHs, sst: sc.sst, airT: sc.airT, uv: sc.uv || 0, wind: sc.wind || 0,
     reef: /reef|rock/i.test(spot.bottom || "") || /reef/i.test(spot.type || ""),
@@ -454,7 +545,9 @@ function tideExtremes(times, map) {
     var isHigh = b > a && b >= c, isLow = b < a && b <= c;
     if (!isHigh && !isLow) continue;
     var denom = a - 2 * b + c;
-    var d = Math.abs(denom) < 1e-6 ? 0 : clamp(0.5 * (a - c) / denom, -1, 1);
+    /* For a genuine local extremum the vertex is within half a sample of the
+       middle point; anything outside that is numerical noise. */
+    var d = Math.abs(denom) < 1e-6 ? 0 : clamp(0.5 * (a - c) / denom, -0.5, 0.5);
     var height = b - 0.25 * (a - c) * d;
     var idx = i + d;
     var base = times[Math.max(0, Math.min(times.length - 1, Math.floor(idx)))];
@@ -463,7 +556,8 @@ function tideExtremes(times, map) {
     var p = parseKey(base);
     out.push({
       type: isHigh ? "high" : "low", date: p.date, hour: p.hour, min: mins,
-      at: pad(p.hour) + ":" + pad(mins), m: height, key: base
+      at: pad(p.hour) + ":" + pad(mins), m: height, key: base,
+      stamp: base.slice(0, 13) + ":" + pad(mins)
     });
   }
   return out;
@@ -524,8 +618,10 @@ function ripRisk(spot, sc) {
   var r = 0, why = [];
   if (sc.localHs > 0.5) { r += clamp((sc.localHs - 0.5) * 1.6, 0, 3); why.push(r1(sc.localHs) + " m of swell is pushing water up the beach"); }
   if (spot.shore && sc.tide.t < 0.35) { r += 0.8; why.push("the tide is low enough to drain it back out through the channels"); }
-  var onshore = -Math.cos(angDiff(sc.windDir, spot.off) * Math.PI / 180);
-  if (onshore > 0.3 && sc.wind > 12) { r += 0.7; why.push("the onshore wind is stacking more water inshore"); }
+  if (sc.windDir != null && sc.wind != null) {
+    var onshore = -Math.cos(angDiff(sc.windDir, spot.off) * Math.PI / 180);
+    if (onshore > 0.3 && sc.wind > 12) { r += 0.7; why.push("the onshore wind is stacking more water inshore"); }
+  }
   if (/rip|current/i.test((spot.hazards || []).join(" "))) { r += 0.6; why.push("this beach has a name for rips"); }
   if (sc.tp && sc.tp >= 11) { r += 0.4; why.push("long-period swell moves a lot of water"); }
   var level = r < 1.1 ? 0 : r < 2.3 ? 1 : 2;
@@ -536,6 +632,24 @@ function ripRisk(spot, sc) {
       ? "Pick a landmark on the beach and check it often. If you get taken, go sideways along the beach before you go in."
       : level === 1 ? "Worth knowing where the channel is before you paddle out." : ""
   };
+}
+
+/* The best unbroken run of a single day at a single spot. Shared by the week
+   list and the day timeline so the two can never disagree about the window. */
+function dayWindowFor(entry, date) {
+  var byHour = {}, peak = null;
+  entry.rows.forEach(function (r) {
+    if (r.date !== date) return;
+    byHour[r.hour] = r;
+    if (!r.dark && (!peak || r.score > peak.score)) peak = r;
+  });
+  if (!peak) return null;
+  var floorScore = Math.max(peak.score - 12, peak.score * 0.72);
+  var holds = function (h) { var r = byHour[h]; return r && !r.dark && r.score >= floorScore; };
+  var from = peak.hour, to = peak.hour;
+  while (from - 1 >= peak.hour - 6 && holds(from - 1)) from--;
+  while (to + 1 <= peak.hour + 6 && holds(to + 1)) to++;
+  return { peak: peak, from: from, to: to };
 }
 
 /* ───────────────────── the week, one row per day ─────────────────────
@@ -555,15 +669,7 @@ function weekOutlook() {
       });
     });
     if (!best) return { date: date, empty: true };
-    /* widen the peak hour into the run of hours that stay near it */
-    var run = { from: best.row.hour, to: best.row.hour };
-    var rows = best.entry.rows.filter(function (r) { return r.date === date && !r.dark; });
-    var floorScore = Math.max(best.row.score - 12, best.row.score * 0.72);
-    rows.forEach(function (r) {
-      if (r.score < floorScore) return;
-      if (r.hour < run.from && r.hour >= best.row.hour - 6) run.from = r.hour;
-      if (r.hour > run.to && r.hour <= best.row.hour + 6) run.to = r.hour;
-    });
+    var run = dayWindowFor(best.entry, date) || { from: best.row.hour, to: best.row.hour };
     return {
       date: date, best: best, run: run, blocks: byBlock,
       conf: confidenceOf(best.row, best.row.key)
@@ -579,8 +685,31 @@ var S = {
   maxDrive: 999,
   view: "now",
   sel: null,           /* {spotId, key} chosen from the grid or chart */
+  filters: { boards: false, beginner: false, freePark: false, noRocks: false },
+  bar: 62,             /* the score you personally think is worth the drive */
   err: null
 };
+var BAR_OPTS = [
+  { v: 46, label: "anything rideable" },
+  { v: 62, label: "worth the drive" },
+  { v: 78, label: "only the good days" }
+];
+try {
+  var savedBar = +localStorage.getItem("rotasurf.bar");
+  if (savedBar) S.bar = savedBar;
+} catch (e) { /* private mode */ }
+
+/* Does this spot pass the chips in the Spots view? */
+function passesFilters(spot, date, hour) {
+  var f = S.filters;
+  if (f.boards && boardRule(spot, date, hour).restricted) return false;
+  if (f.beginner && !(spot.level === "beginner" || spot.level === "all")) return false;
+  /* An explicit flag, not a search for the word "free" in the prose — the
+     blue-zone beaches describe a free window inside a paid scheme. */
+  if (f.freePark && spot.park.free !== true) return false;
+  if (f.noRocks && /rock|reef|coral/i.test((spot.bottom || "") + " " + (spot.type || ""))) return false;
+  return true;
+}
 
 function spotsInRange() {
   return S.model.spots.filter(function (e) { return e.spot.drive <= S.maxDrive; });
@@ -588,8 +717,13 @@ function spotsInRange() {
 function rowAt(entry, key) { return entry.byKey[key]; }
 function nowKey() {
   var k = madridNowKey();
-  if (S.model && S.model.hours.indexOf(k) < 0) return S.model.hours[0];
-  return k;
+  if (!S.model || !S.model.hours.length) return k;
+  var H = S.model.hours;
+  if (H.indexOf(k) >= 0) return k;
+  /* Outside the series — clamp to the nearest hour we actually hold, rather
+     than silently showing the first hour of a cached forecast as "now". */
+  for (var i = 0; i < H.length; i++) if (H[i] >= k) return H[i];
+  return H[H.length - 1];
 }
 /* Best spot at a given hour, within the drive filter. */
 function bestAt(key) {
@@ -836,6 +970,66 @@ function startWaveLoop() {
   waveAnim.raf = requestAnimationFrame(tick);
 }
 
+/* ═══════════════════════════ the day, on a bar ═══════════════════════════
+   One line for the whole day: when there is light, when the lifeguard towers
+   make the buoyed zone off limits to boards, and where the good hours fall.
+   In summer those three things interact — the answer is usually "go at first
+   light" — and seeing them stacked makes that obvious without explanation. */
+function dayTimeline(entry, spot, date, sun) {
+  var W = 720, H = 54, y = 14, h = 15;
+  var x = function (min) { return clamp(min, 0, 1440) / 1440 * W; };
+  var tw = twilightMinutes(date, spot.lat);
+  var win = dayWindowFor(entry, date);
+  var seasonal = spot.bb && spot.bb.status === "seasonal" && inBathingSeason(date);
+  var o = [];
+
+  o.push('<svg viewBox="0 0 ' + W + ' ' + H + '" class="tl" preserveAspectRatio="none" role="img" ' +
+    'aria-label="Daylight, lifeguard hours and the best window for ' + esc(date) + '">');
+  o.push('<rect x="0" y="' + y + '" width="' + W + '" height="' + h + '" class="tl-night"/>');
+  o.push('<rect x="' + r1(x(sun.up - tw)) + '" y="' + y + '" width="' + r1(x(sun.up) - x(sun.up - tw)) + '" height="' + h + '" class="tl-tw"/>');
+  o.push('<rect x="' + r1(x(sun.down)) + '" y="' + y + '" width="' + r1(x(sun.down + tw) - x(sun.down)) + '" height="' + h + '" class="tl-tw"/>');
+  o.push('<rect x="' + r1(x(sun.up)) + '" y="' + y + '" width="' + r1(x(sun.down) - x(sun.up)) + '" height="' + h + '" class="tl-day"/>');
+
+  if (seasonal) {
+    o.push('<rect x="' + r1(x(GUARD_ON * 60)) + '" y="' + y + '" width="' +
+      r1(x(GUARD_OFF * 60) - x(GUARD_ON * 60)) + '" height="' + h + '" class="tl-guard"/>');
+  }
+  if (win) {
+    var col = scoreSolid(win.peak.score);
+    o.push('<rect x="' + r1(x(win.from * 60)) + '" y="' + (y + h + 5) + '" width="' +
+      r1(Math.max(4, x((win.to + 1) * 60) - x(win.from * 60))) + '" height="7" rx="3" fill="' + col.bg + '"/>');
+  }
+  [0, 6, 12, 18, 24].forEach(function (hh) {
+    o.push('<line x1="' + r1(x(hh * 60)) + '" y1="' + (y - 3) + '" x2="' + r1(x(hh * 60)) + '" y2="' + (y + h + 3) + '" class="tl-tick"/>');
+    if (hh > 0 && hh < 24) o.push('<text x="' + r1(x(hh * 60)) + '" y="' + (y - 5) + '" class="tl-lbl">' + pad(hh) + '</text>');
+  });
+  if (date === madridToday()) {
+    var mins = +MTIME.format(new Date()).slice(0, 2) * 60 + +MTIME.format(new Date()).slice(3, 5);
+    o.push('<line x1="' + r1(x(mins)) + '" y1="' + (y - 6) + '" x2="' + r1(x(mins)) + '" y2="' + (y + h + 12) + '" class="tl-now"/>');
+  }
+  o.push('</svg>');
+
+  var t = function (min) { return pad(Math.floor(min / 60) % 24) + ":" + pad(Math.round(min) % 60); };
+  var legend =
+    '<div class="tl-key">' +
+      '<span><i class="tl-k-tw"></i>first light ' + t(sun.up - tw) + '</span>' +
+      '<span><i class="tl-k-day"></i>sun ' + t(sun.up) + '–' + t(sun.down) + '</span>' +
+      '<span><i class="tl-k-tw"></i>last light ' + t(sun.down + tw) + '</span>' +
+      (seasonal ? '<span><i class="tl-k-guard"></i>towers ' + pad(GUARD_ON) + ':00–' + pad(GUARD_OFF) + ':00, no boards in the zone</span>' : "") +
+      (win ? '<span><i class="tl-k-win" style="background:' + scoreSolid(win.peak.score).bg + '"></i>best ' +
+        hhmm(win.from) + '–' + hhmm(win.to + 1) + '</span>' : "") +
+    '</div>';
+
+  var advice = "";
+  if (seasonal && win && win.from < GUARD_OFF && win.to >= GUARD_ON) {
+    var dawn = Math.max(Math.ceil((sun.up - tw) / 60), 0);
+    advice = '<p class="foot">The good hours overlap the lifeguard shift, so either start at first light and be out by ' +
+      pad(GUARD_ON) + ':00, or walk past the buoys. There is usually ' +
+      Math.max(0, GUARD_ON - dawn) + ' h of light before the towers open.</p>';
+  }
+  return '<div class="tlwrap">' + o.join("") + legend + advice + '</div>';
+}
+
 /* ════════════════════════ swell / wind compass ════════════════════════ */
 function compassSVG(sc, spot) {
   var R = 54, C0 = 60;
@@ -898,7 +1092,7 @@ function scoreSolid(s) {
   return { bg: "rgb(" + rgb.join(",") + ")", ink: lum > 0.55 ? "#0A1E29" : "#FFFFFF" };
 }
 function windLabel(sc, spot) {
-  if (sc.wind == null) return "—";
+  if (sc.wind == null || sc.windDir == null) return "—";
   var d = angDiff(sc.windDir, spot.off);
   var word = sc.wind < 4 ? "glassy" : d < 50 ? "offshore" : d < 78 ? "cross-off" : d < 112 ? "cross-shore" : d < 140 ? "cross-on" : "onshore";
   return Math.round(sc.wind) + " kn " + compass(sc.windDir) + " · " + word;
@@ -1002,6 +1196,36 @@ function renderNow() {
       (conf.lead > 0 ? ", " + conf.lead + " h ahead" : "") + '.</p>';
   host.appendChild(why);
 
+  /* ── what the sea is actually made of ── */
+  if (sc.swellH != null || sc.windWaveH != null) {
+    var sea = el("section", "card");
+    var swH = sc.swellH || 0, wwH = sc.windWaveH || 0, tot = Math.max(swH + wwH, 0.01);
+    var read = swH >= wwH * 2 && (sc.swellT || 0) >= 10
+      ? "Proper groundswell. Organised lines with real power behind them — this is what you want."
+      : swH >= wwH * 1.3
+        ? "Mostly swell, with some wind chop sitting on top of it. Workable."
+        : wwH > swH
+          ? "Mostly local wind chop rather than swell: short, disorganised and gutless. The wave height number flatters it."
+          : "An even mix of swell and wind chop — bumpy, but there is something underneath.";
+    sea.innerHTML = '<h3>What the sea is made of</h3>' +
+      '<div class="mix"><span class="mix-sw" style="width:' + r1(swH / tot * 100) + '%"></span>' +
+      '<span class="mix-ww" style="width:' + r1(wwH / tot * 100) + '%"></span></div>' +
+      '<div class="mixkey">' +
+        '<span><i class="mix-sw"></i>groundswell ' + r1(swH) + ' m' +
+          (sc.swellT ? ' at ' + Math.round(sc.swellT) + ' s' : '') + '</span>' +
+        '<span><i class="mix-ww"></i>wind chop ' + r1(wwH) + ' m' +
+          (sc.windWaveT ? ' at ' + Math.round(sc.windWaveT) + ' s' : '') + '</span>' +
+      '</div>' +
+      '<p class="foot">' + esc(read) + '</p>';
+    host.appendChild(sea);
+  }
+
+  /* ── the day on one bar ── */
+  var tl = el("section", "card");
+  tl.innerHTML = '<h3>' + esc(dayLabel(sc.date)) + ' at a glance</h3>' +
+    dayTimeline(pick.entry, spot, sc.date, sc.sun);
+  host.appendChild(tl);
+
   /* ── can I actually go in, and what is the water doing ── */
   var safety = el("section", "card");
   var dayTides = tidesOn(pick.entry, sc.date);
@@ -1046,8 +1270,17 @@ function renderNow() {
   var week = weekOutlook();
   var top = week.filter(function (d) { return !d.empty; })
     .reduce(function (a, d) { return !a || d.best.row.score > a.best.row.score ? d : a; }, null);
+  var hits = week.filter(function (d) { return !d.empty && d.best.row.score >= S.bar; }).length;
   var nb = el("section", "card");
   nb.innerHTML = '<h3>The week ahead</h3>' +
+    '<div class="barpick"><span class="lbl">my bar</span>' +
+      '<select id="barSel" aria-label="What counts as worth going">' +
+        BAR_OPTS.map(function (o) {
+          return '<option value="' + o.v + '"' + (o.v === S.bar ? " selected" : "") + '>' + esc(o.label) + '</option>';
+        }).join("") + '</select>' +
+      '<b class="barhits' + (hits ? " on" : "") + '">' +
+        (hits ? hits + (hits === 1 ? " day clears it" : " days clear it") : "nothing clears it") + '</b>' +
+    '</div>' +
     '<p class="foot">' + (top && top.best.row.score >= 55
       ? "Pick of the week is <b>" + esc(dayLabel(top.date)) + "</b> at " + esc(top.best.entry.spot.name) +
         ". The score is the best single hour; the time range beside it is how long the day stays near that."
@@ -1056,13 +1289,19 @@ function renderNow() {
       if (d.empty) return '<div class="win win-none"><span class="win-main"><b>' + dayLabel(d.date) + '</b><span>no data</span></span></div>';
       var r = d.best.row, sp = d.best.entry.spot, col = scoreCell(r.score);
       var range = d.run.from === d.run.to ? hhmm(d.run.from) : hhmm(d.run.from) + "–" + hhmm(d.run.to + 1);
-      return '<button class="win" data-spot="' + esc(sp.id) + '" data-key="' + esc(r.key) + '">' +
+      return '<button class="win' + (r.score >= S.bar ? " win-hit" : "") + '" data-spot="' + esc(sp.id) + '" data-key="' + esc(r.key) + '">' +
         '<span class="win-score" style="background:' + col.bg + ';color:' + col.ink + '">' + r.score + '</span>' +
         '<span class="win-main"><b>' + dayLabel(d.date) + ' · ' + range + '</b>' +
         '<span>' + esc(sp.name) + ' · peak ' + hhmm(r.hour) + ' · ' + r1(r.localHs) + ' m · ' + esc(windLabel(r, sp)) + '</span></span>' +
         '<span class="win-tag">' + band(r.score).word + '<em class="c' + d.conf.level + '">' + d.conf.label.toLowerCase() + '</em></span></button>';
     }).join("") + '</div>';
   host.appendChild(nb);
+
+  $("#barSel").addEventListener("change", function () {
+    S.bar = +this.value || 62;
+    try { localStorage.setItem("rotasurf.bar", String(S.bar)); } catch (e) {}
+    render();
+  });
 
   $$(".win[data-spot]", nb).forEach(function (btn) {
     btn.addEventListener("click", function () {
@@ -1356,11 +1595,23 @@ function destroyMap() {
 
 function buildMap(key) {
   var host = document.getElementById("spotMap");
-  if (!host || typeof L === "undefined") return;
+  if (!host) return;
+  if (typeof L === "undefined") {
+    /* The CDN is blocked or offline. Say so rather than leaving a grey box. */
+    host.classList.add("mapfail");
+    host.innerHTML = '<p>The map library did not load — you are probably offline, or a ' +
+      'network is blocking the CDN. Everything else on this page still works, and every ' +
+      'spot below has a direct link to its car park in Google Maps.</p>';
+    return;
+  }
+  host.classList.remove("mapfail");
   destroyMap();
 
   var pinned = S.spotId ? S.model.spots.filter(function (e) { return e.spot.id === S.spotId; })[0] : null;
-  var list = spotsInRange();
+  var pk = parseKey(key);
+  var list = spotsInRange().filter(function (e) {
+    return (pinned && pinned.spot.id === e.spot.id) || passesFilters(e.spot, pk.date, pk.hour);
+  });
 
   mapObj = L.map(host, { scrollWheelZoom: false, attributionControl: true });
   var street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -1416,6 +1667,13 @@ function buildMap(key) {
 
 /* ════════════════════════════ view: SPOTS ════════════════════════════ */
 
+var FILTER_CHIPS = [
+  { id: "boards",   label: "Boards OK now", why: "hides beaches where the summer zone rule is in force at this hour" },
+  { id: "beginner", label: "Forgiving",     why: "beginner-friendly beaches only" },
+  { id: "freePark", label: "Free parking",  why: "no meter, no blue zone" },
+  { id: "noRocks",  label: "Sand only",     why: "no reef, no rock shelf" }
+];
+
 function renderSpots() {
   var host = $("#v-spots");
   destroyMap();                       /* the container is about to be thrown away */
@@ -1432,10 +1690,22 @@ function renderSpots() {
      for anyone who opened the page in a background tab. */
   setTimeout(function () { buildMap(key); }, 0);
 
+  var pk = parseKey(key);
   var head = el("section", "card");
   head.innerHTML = '<h3>Ranked for ' + esc(key === nowKey() ? "right now" : dayLabel(key.slice(0, 10)) + " at " + hhmm(+key.slice(11, 13))) + '</h3>' +
-    '<p class="foot">Seventeen beaches between Rota and Tarifa, scored against this hour and sorted best first. Every one lists where you actually leave the car.</p>';
+    '<p class="foot">' + SPOTS.length + ' beaches between Rota and Tarifa, scored against this hour and sorted best first. Every one lists where you actually leave the car.</p>' +
+    '<div class="chips filters">' + FILTER_CHIPS.map(function (f) {
+      return '<button class="chip fchip' + (S.filters[f.id] ? " on" : "") + '" data-f="' + f.id + '" ' +
+        'aria-pressed="' + (S.filters[f.id] ? "true" : "false") + '" title="' + esc(f.why) + '">' + esc(f.label) + '</button>';
+    }).join("") + '</div>';
   host.appendChild(head);
+  $$(".fchip", head).forEach(function (c) {
+    c.addEventListener("click", function () {
+      var id = c.getAttribute("data-f");
+      S.filters[id] = !S.filters[id];
+      render();
+    });
+  });
 
   /* the board rules, folded away but one tap from everywhere */
   var rules = el("section", "card rules");
@@ -1445,18 +1715,21 @@ function renderSpots() {
     '<p class="foot">' + esc(RULES.note) + '</p></details>';
   host.appendChild(rules);
 
-  var list = spotsInRange().map(function (e) {
-    return { e: e, r: rowAt(e, key) };
-  }).filter(function (x) { return x.r; })
+  var list = spotsInRange()
+    .filter(function (e) { return passesFilters(e.spot, pk.date, pk.hour); })
+    .map(function (e) { return { e: e, r: rowAt(e, key) }; })
+    .filter(function (x) { return x.r; })
     .sort(function (a, b) { return b.r.score - a.r.score; });
 
-  list.forEach(function (x) {
-    host.appendChild(spotCard(x.e.spot, x.r));
-  });
+  if (!list.length) {
+    host.appendChild(el("p", "empty", "No beach passes all of those filters at this hour. Turn one off."));
+  }
+  list.forEach(function (x) { host.appendChild(spotCard(x.e.spot, x.r)); });
 
-  if (S.maxDrive < 999) {
-    host.appendChild(el("p", "empty",
-      spotsInRange().length + " of " + S.model.spots.length + " spots shown — the drive filter is on."));
+  var hidden = S.model.spots.length - list.length;
+  if (hidden > 0) {
+    host.appendChild(el("p", "empty", list.length + " of " + S.model.spots.length +
+      " beaches shown — " + hidden + " filtered out by the drive limit or the chips above."));
   }
 }
 
@@ -1469,9 +1742,8 @@ function spotCard(spot, sc) {
   var b = band(sc.score), col = scoreCell(sc.score);
   var tag = BBTAG[spot.bb.status] || BBTAG.open;
   var card = el("section", "card spot");
-  var mapsTo = function (la, lo, label) {
-    return "https://www.google.com/maps/dir/?api=1&destination=" + la + "," + lo +
-      "&travelmode=driving" + (label ? "" : "");
+  var mapsTo = function (la, lo) {
+    return "https://www.google.com/maps/dir/?api=1&destination=" + la + "," + lo + "&travelmode=driving";
   };
   card.innerHTML =
     '<div class="spot-head">' +

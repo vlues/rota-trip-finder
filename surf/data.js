@@ -35,7 +35,7 @@ window.__SURF_SPOTS__ = [
   },
   park: {
     name: "Plaza Bartolomé Pérez underground + Av. de la Marina street",
-    lat: 36.6167, lon: -6.3579, cost: "Street free · underground ~€1.20/h",
+    lat: 36.6167, lon: -6.3579, free: true, cost: "Street free · underground ~€1.20/h",
     walk: "2–4 min", note: "Street parking behind the paseo is gone by 10:00 in July and August; the underground car park almost always has space and puts you 200 m from the sand."
   },
   kit: ["Nothing special — you can walk here"],
@@ -60,7 +60,7 @@ window.__SURF_SPOTS__ = [
   },
   park: {
     name: "Dirt pull-off at Punta Candor, off the A-2077 coast road",
-    lat: 36.6377, lon: -6.3888, cost: "Free",
+    lat: 36.6377, lon: -6.3888, free: true, cost: "Free",
     walk: "5 min through the pines", note: "Unsurfaced and rutted — fine for a normal car in summer, puddled and soft after winter rain. Nothing is watched here, so leave nothing visible in the boot."
   },
   kit: ["Fin tethers — losing one over the shelf ends the session", "Reef booties if you are unsure of the tide"],
@@ -78,7 +78,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Quiet stretch with no buoyed bathing corridor for most of its length — boards are fine. Lifeguarded section in high summer follows the usual 15 Jun–15 Sep zone rule." },
   park: {
     name: "Sandy lot at the end of the Aguadulce access track",
-    lat: 36.6315, lon: -6.3757, cost: "Free", walk: "3 min",
+    lat: 36.6315, lon: -6.3757, free: true, cost: "Free", walk: "3 min",
     note: "Small — maybe twenty cars. Empty outside July/August. Soft sand at the edges; stay on the packed line."
   },
   kit: ["Booties if the tide is dropping"],
@@ -96,7 +96,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Lifeguarded and buoyed in front of the main access points 15 Jun–15 Sep; walk two minutes up the beach and you are outside the zone. Off-season it is unrestricted." },
   park: {
     name: "Pine-shaded lots off the Costa Ballena access roads",
-    lat: 36.6816, lon: -6.4137, cost: "Free", walk: "4–6 min over the boardwalk",
+    lat: 36.6816, lon: -6.4137, free: true, cost: "Free", walk: "4–6 min over the boardwalk",
     note: "Genuinely big, genuinely free, and shaded by umbrella pines — the most civilised car park on this list. Multiple entrances; the northern ones are quieter."
   },
   kit: ["Sandals — the boardwalk is long and hot"],
@@ -116,7 +116,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Outside the town bathing zones. Boards fine; the ordinance bans them only inside the marked swimming areas in season." },
   park: {
     name: "Street parking along the Tres Piedras seafront",
-    lat: 36.6953, lon: -6.4224, cost: "Free", walk: "1–3 min",
+    lat: 36.6953, lon: -6.4224, free: true, cost: "Free", walk: "1–3 min",
     note: "Ordinary residential street parking — easy nine months of the year, tight in August. No lot, so park considerately."
   },
   kit: ["Booties"],
@@ -134,7 +134,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Small coves with buoyed swim zones in summer. Early morning or out of season and there is no issue." },
   park: {
     name: "Street parking in the Fuentebravía urbanización",
-    lat: 36.6107, lon: -6.2839, cost: "Free", walk: "3–5 min plus steps down",
+    lat: 36.6107, lon: -6.2839, free: true, cost: "Free", walk: "3–5 min plus steps down",
     note: "Residential streets above the cliff. There is no real car park — you park on the road and walk down. Do not block the private driveways; they do get towed."
   },
   kit: ["Booties for the rocks at the ends"],
@@ -152,7 +152,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Urban lifeguarded beach — boards out of the buoyed zone 15 Jun–15 Sep during tower hours." },
   park: {
     name: "Lot by the Castillo de Santa Catalina",
-    lat: 36.5963, lon: -6.2718, cost: "Free", walk: "2 min",
+    lat: 36.5963, lon: -6.2718, free: true, cost: "Free", walk: "2 min",
     note: "Decent-sized free lot next to the fort. Fills on summer weekends but turns over quickly."
   },
   kit: [],
@@ -172,7 +172,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Cádiz runs a proper municipal beach ordinance: no boards inside the buoyed bathing zone in season during lifeguard hours, with marked entry corridors at some access points. Early mornings are the accepted window." },
   park: {
     name: "Blue-zone street parking on Paseo Marítimo",
-    lat: 36.5075, lon: -6.2775, cost: "Paid blue zone ~€1/h, free 14:00–16:30 and after 21:00",
+    lat: 36.5075, lon: -6.2775, free: false, cost: "Paid blue zone ~€1/h, free 14:00–16:30 and after 21:00",
     walk: "1 min", note: "Pay-and-display along the whole seafront. If you want free, drive on to Cortadura — three minutes further and the lot there costs nothing."
   },
   kit: ["Parking coins or the app"],
@@ -190,7 +190,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Largely unbuilt and only lifeguarded in part, so boards are fine along most of its length year-round." },
   park: {
     name: "Free lots along the Cortadura seafront, off the N-443",
-    lat: 36.4892, lon: -6.2657, cost: "Free", walk: "2 min over the dune boardwalk",
+    lat: 36.4892, lon: -6.2657, free: true, cost: "Free", walk: "2 min over the dune boardwalk",
     note: "Long strip of free lots with space even in August. This is the best free parking anywhere on the Cádiz isthmus."
   },
   kit: ["Fin tethers — there is real current here"],
@@ -208,7 +208,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Tiny, extremely popular town beach. In season it is swimmers only inside the buoys — this is a winter-storm spot, not a summer one." },
   park: {
     name: "Campo del Sur street parking / Plaza San Antonio area",
-    lat: 36.5286, lon: -6.3013, cost: "Blue zone, difficult", walk: "5–10 min",
+    lat: 36.5286, lon: -6.3013, free: false, cost: "Blue zone, difficult", walk: "5–10 min",
     note: "Old-town parking is genuinely hard. Honestly: park at the Canalejas underground and walk, or take the Rota catamaran and walk from the terminal."
   },
   kit: ["Patience for the parking"],
@@ -228,7 +228,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Chiclana buoys off the developed sections in summer. The southern end towards the Torre del Puerco is wilder and unrestricted." },
   park: {
     name: "Sector 5 / Torre del Puerco lots, Novo Sancti Petri",
-    lat: 36.3325, lon: -6.164, cost: "Free (some paid overflow in August)", walk: "3–5 min",
+    lat: 36.3325, lon: -6.164, free: true, cost: "Free (some paid overflow in August)", walk: "3–5 min",
     note: "Big sandy lots at the southern accesses. The southern end is both the better wave and the easier parking — drive past the hotels."
   },
   kit: [],
@@ -246,7 +246,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Cliff-backed coves outside Conil's main buoyed beach — no seasonal board ban in practice." },
   park: {
     name: "Cliff-top lots at Fuente del Gallo",
-    lat: 36.2909, lon: -6.1072, cost: "Free", walk: "4 min plus a staircase",
+    lat: 36.2909, lon: -6.1072, free: true, cost: "Free", walk: "4 min plus a staircase",
     note: "Gravel lots on the clifftop. Fine outside August; in August Conil is chaos and you want to arrive before 10:00."
   },
   kit: ["Booties", "Fin tethers"],
@@ -267,7 +267,7 @@ window.__SURF_SPOTS__ = [
   },
   park: {
     name: "Dirt strip along the A-2233 beach road",
-    lat: 36.2261, lon: -6.064, cost: "Free, though attendants ask €3–5 in summer",
+    lat: 36.2261, lon: -6.064, free: true, cost: "Free, though attendants ask €3–5 in summer",
     walk: "1–2 min", note: "Kilometres of roadside dirt parking right behind the beach — you can check the waves from the car. In July and August informal attendants wave you into spaces for a few euros; it is not official, and it is easier to just pay it."
   },
   kit: ["Fins", "Fin tethers", "Wax or deck grip", "Cash for the parking guy in summer"],
@@ -289,7 +289,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Wild, cliff-backed and mostly unlifeguarded. No board restrictions; the constraint is the reef, not the ordinance." },
   park: {
     name: "Roadside along the Caños seafront and the Faro de Trafalgar track",
-    lat: 36.1867, lon: -6.0316, cost: "Free", walk: "2–8 min depending where you squeeze in",
+    lat: 36.1867, lon: -6.0316, free: true, cost: "Free", walk: "2–8 min depending where you squeeze in",
     note: "Narrow village road with no real lot. Arrive early on a good swell or you will be walking fifteen minutes. The Trafalgar lighthouse track has more space."
   },
   kit: ["Reef booties — not optional", "Impact vest on the bigger days", "Fin tethers"],
@@ -307,7 +307,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Buoyed zone in front of the village in summer; the beach runs for kilometres and the rest is open." },
   park: {
     name: "Lots at the village entrance and along the Atlanterra road",
-    lat: 36.1561, lon: -5.8685, cost: "Free", walk: "3–6 min",
+    lat: 36.1561, lon: -5.8685, free: true, cost: "Free", walk: "3–6 min",
     note: "Plenty of free space outside August. In August Zahara is a destination town and parking is genuinely painful."
   },
   kit: ["Windproof jacket — the Levante here is relentless"],
@@ -325,7 +325,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Natural park beach, no board restrictions. Roman ruins at the back have their own opening hours if you want to combine the trip." },
   park: {
     name: "Lot at the Baelo Claudia end of the Bolonia access road",
-    lat: 36.0841, lon: -5.7633, cost: "Free", walk: "3 min",
+    lat: 36.0841, lon: -5.7633, free: true, cost: "Free", walk: "3 min",
     note: "Sandy lots behind the dune. Fine except at the very peak of August."
   },
   kit: [],
@@ -343,7 +343,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Shared with kite and windsurf schools, which have their own marked launch corridors. Stay clear of the kite zones and there is no restriction on bodyboarding." },
   park: {
     name: "Los Lances Norte lot, off the N-340",
-    lat: 36.0278, lon: -5.6255, cost: "Free", walk: "5 min over the boardwalk",
+    lat: 36.0278, lon: -5.6255, free: true, cost: "Free", walk: "5 min over the boardwalk",
     note: "Large free lot with a boardwalk across the marsh. Busy with kiters from mid-morning."
   },
   kit: ["Eyes up for kite lines"],

@@ -296,6 +296,8 @@ details[open]>summary:before{content:"▾ "}
 .mapbox{height:280px;border-radius:10px;overflow:hidden;border:1px solid var(--line);margin-top:10px;
   background:var(--sunk);z-index:0}
 .leaflet-container{font:inherit;background:var(--sunk)}
+.mapbox.mapfail{display:grid;place-items:center;padding:18px;height:auto;min-height:120px}
+.mapbox.mapfail p{margin:0;font-size:13px;color:var(--muted);text-align:center;max-width:34em}
 .mpin{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;
   font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
   box-shadow:0 0 0 2px var(--panel),0 2px 6px rgba(0,0,0,.45)}
@@ -303,6 +305,46 @@ details[open]>summary:before{content:"▾ "}
 .mpark{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;background:var(--amber);
   color:#fff;font-weight:700;font-size:12px;box-shadow:0 0 0 2px var(--panel)}
 .leaflet-popup-content{font-size:12.5px;line-height:1.45}
+
+
+/* ───────────────────── day timeline ───────────────────── */
+.tlwrap{margin-top:10px}
+.tl{display:block;width:100%;height:54px}
+.tl-night{fill:var(--ink);opacity:.16}
+.tl-tw{fill:var(--amber-b);opacity:.30}
+.tl-day{fill:rgb(var(--heat)/.30)}
+.tl-guard{fill:var(--warn);opacity:.34}
+.tl-tick{stroke:var(--line);stroke-width:1}
+.tl-lbl{font-family:"IBM Plex Mono",monospace;font-size:9px;fill:var(--muted);text-anchor:middle}
+.tl-now{stroke:var(--ink);stroke-width:1.6}
+.tl-key{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:11.5px;color:var(--ink-2)}
+.tl-key span{display:flex;align-items:center;gap:5px}
+.tl-key i{width:12px;height:9px;border-radius:2px;flex:0 0 auto}
+.tl-k-tw{background:var(--amber-b);opacity:.45}
+.tl-k-day{background:rgb(var(--heat)/.45)}
+.tl-k-guard{background:var(--warn);opacity:.5}
+.tl-k-win{height:7px!important;border-radius:4px}
+
+/* ───────────────────── sea-state mix ───────────────────── */
+.mix{display:flex;height:14px;border-radius:7px;overflow:hidden;margin-top:11px;background:var(--sunk)}
+.mix span{display:block;height:100%}
+.mix-sw{background:var(--teal)}
+.mix-ww{background:var(--muted);opacity:.55}
+.mixkey{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:7px;font-size:12px;color:var(--ink-2)}
+.mixkey span{display:flex;align-items:center;gap:6px}
+.mixkey i{width:12px;height:9px;border-radius:2px;display:inline-block}
+
+/* ───────────────────── my bar ───────────────────── */
+.barpick{display:flex;align-items:center;gap:8px;margin:9px 0 2px;flex-wrap:wrap}
+.barpick select{border:1px solid var(--line);background:var(--sunk);border-radius:8px;padding:4px 8px;font-size:12.5px}
+.barhits{font-size:12px;color:var(--muted);font-weight:500}
+.barhits.on{color:var(--good)}
+.win-hit{border-color:var(--good);box-shadow:inset 2px 0 0 var(--good)}
+
+/* ───────────────────── filter chips ───────────────────── */
+.filters{margin-top:10px}
+.fchip{cursor:pointer}
+.fchip.on{background:var(--teal);color:var(--panel);border-color:var(--teal)}
 
 /* ───────────────────────────── tabs ───────────────────────────── */
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--panel);
