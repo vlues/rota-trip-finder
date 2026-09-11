@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#e8b88a" />
 <title>Spain Vacation</title>
+<meta name="app-version" content="20260911164802">
 <meta name="description" content="Stays, flights and a shared shortlist for the crew — one search box." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌅</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -26,7 +27,7 @@
   <div class="topbar-inner">
     <div>
       <h1 id="tripName">Spain Vacation</h1>
-      <p class="strap">a trip finder for the crew · <a href="rings/" style="color:inherit;text-decoration:underline;text-underline-offset:2px">day-trip chart ⚓</a> · <a href="hikes/" style="color:inherit;text-decoration:underline;text-underline-offset:2px">hike finder 🥾</a> · <a href="surf/" style="color:inherit;text-decoration:underline;text-underline-offset:2px">wave watch 🌊</a></p>
+      <p class="strap">four tools for the Rota crew</p>
     </div>
     <button id="settingsBtn" class="gear" aria-label="Settings" title="Settings">
       <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.4-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -35,6 +36,32 @@
 </header>
 
 <main>
+
+
+  <!-- what this site actually is: four tools, not one search box -->
+  <section class="tools" aria-label="The tools on this site">
+    <a class="tool glass" href="surf/">
+      <span class="tool-ico" aria-hidden="true">🌊</span>
+      <b>Wave Watch</b>
+      <span>Where and when to bodyboard. Seventeen beaches scored hour by hour, tide times, where to park, and whether boards are allowed today.</span>
+    </a>
+    <a class="tool glass" href="hikes/">
+      <span class="tool-ico" aria-hidden="true">🥾</span>
+      <b>Hike Finder</b>
+      <span>A hundred walks across Spain on a terrain map — the car park, the walking time, and whether the trail is open right now.</span>
+    </a>
+    <a class="tool glass" href="rings/">
+      <span class="tool-ico" aria-hidden="true">⚓</span>
+      <b>Range Rings</b>
+      <span>154 day trips drawn as rings of driving time from Rota. Pick a ring, pick a pin, go.</span>
+    </a>
+    <a class="tool glass tool-here" href="#v-stays">
+      <span class="tool-ico" aria-hidden="true">🛏️</span>
+      <b>Stays &amp; Flights</b>
+      <span>This page. Type what you want in a sentence and it ranks places to stay and fares to get here.</span>
+      <em>you are here</em>
+    </a>
+  </section>
 
   <!-- glass search card -->
   <section class="search glass">
@@ -122,7 +149,8 @@
   </div>
 </div>
 
-<script src="./config.js"></script>
-<script src="./app.js"></script>
+<script src="./build-check.js?v=20260911164802"></script>
+<script src="./config.js?v=20260911164802"></script>
+<script src="./app.js?v=20260911164802"></script>
 </body>
 </html>

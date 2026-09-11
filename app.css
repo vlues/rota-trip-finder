@@ -356,3 +356,35 @@ a.txt, a.txt:hover { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .sun, .blob, .card, .panel { animation: none !important; }
 }
+
+/* ── the four tools ───────────────────────────────────────────────────
+   The site is four separate tools that happen to share a domain; the
+   strap line was hiding three of them behind underlined words. */
+.tools {
+  display: grid; gap: var(--space-2);
+  grid-template-columns: 1fr;
+  margin: 0 auto var(--space-4);
+  max-width: 720px; padding: 0 var(--space-3);
+}
+@media (min-width: 620px) { .tools { grid-template-columns: 1fr 1fr; } }
+.tool {
+  position: relative;
+  display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  color: var(--color-text);
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+.tool:hover { transform: translateY(-1px); color: var(--color-text); }
+.tool-ico { grid-row: 1 / span 2; font-size: 24px; line-height: 1.1; align-self: start; }
+.tool b {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 19px; line-height: 1.15; letter-spacing: .01em;
+}
+.tool span:not(.tool-ico) { font-size: 12.5px; line-height: 1.45; color: var(--color-neutral-800); }
+.tool em {
+  position: absolute; top: var(--space-2); right: var(--space-3);
+  font-style: normal; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--color-neutral-600);
+}
+.tool-here { opacity: .82; }
