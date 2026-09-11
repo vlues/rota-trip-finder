@@ -32,6 +32,13 @@ var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, fu
 var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
 var pad = function (n) { return (n < 10 ? "0" : "") + n; };
 var r1 = function (v) { return Math.round(v * 10) / 10; };
+/* Wave heights: one decimal always, and an honest word rather than "0 m"
+   when there is nothing there to measure. */
+var mtr = function (v) {
+  if (v == null || !isFinite(v)) return "—";
+  if (v < 0.05) return "flat";
+  return v.toFixed(1) + " m";
+};
 var avg = function (a) { var s = 0, n = 0, i; for (i = 0; i < a.length; i++) if (a[i] != null) { s += a[i]; n++; } return n ? s / n : null; };
 
 /* Smallest angle between two bearings, 0–180. */
@@ -615,15 +622,25 @@ function boardRule(spot, date, hour) {
    low enough to force it out through a channel, and onshore wind piling
    more water in. Stated as a rule of thumb, not as a measurement. */
 function ripRisk(spot, sc) {
+  var hs = sc.localHs || 0;
+  /* A rip is water the swell put on the beach trying to get back out. With
+     no swell there is nothing to get back out, whatever the beach's
+     reputation or the state of the tide. */
+  if (hs < 0.35) {
+    return { level: 0, label: "Low", advice: "",
+             why: "there is barely any swell — nothing is moving enough water to form a rip" };
+  }
   var r = 0, why = [];
-  if (sc.localHs > 0.5) { r += clamp((sc.localHs - 0.5) * 1.6, 0, 3); why.push(r1(sc.localHs) + " m of swell is pushing water up the beach"); }
-  if (spot.shore && sc.tide.t < 0.35) { r += 0.8; why.push("the tide is low enough to drain it back out through the channels"); }
+  /* Everything else scales with how much water is actually arriving. */
+  var scale = clamp((hs - 0.35) / 0.85, 0.25, 1);
+  if (hs > 0.5) { r += clamp((hs - 0.5) * 1.6, 0, 3); why.push(mtr(hs) + " of swell is pushing water up the beach"); }
+  if (spot.shore && sc.tide.t < 0.35) { r += 0.8 * scale; why.push("the tide is low enough to drain it back out through the channels"); }
   if (sc.windDir != null && sc.wind != null) {
     var onshore = -Math.cos(angDiff(sc.windDir, spot.off) * Math.PI / 180);
-    if (onshore > 0.3 && sc.wind > 12) { r += 0.7; why.push("the onshore wind is stacking more water inshore"); }
+    if (onshore > 0.3 && sc.wind > 12) { r += 0.7 * scale; why.push("the onshore wind is stacking more water inshore"); }
   }
-  if (/rip|current/i.test((spot.hazards || []).join(" "))) { r += 0.6; why.push("this beach has a name for rips"); }
-  if (sc.tp && sc.tp >= 11) { r += 0.4; why.push("long-period swell moves a lot of water"); }
+  if (/rip|current/i.test((spot.hazards || []).join(" "))) { r += 0.6 * scale; why.push("this beach has a name for rips"); }
+  if (sc.tp && sc.tp >= 11) { r += 0.4 * scale; why.push("long-period swell moves a lot of water"); }
   var level = r < 1.1 ? 0 : r < 2.3 ? 1 : 2;
   return {
     level: level, label: ["Low", "Moderate", "High"][level],
@@ -636,16 +653,17 @@ function ripRisk(spot, sc) {
 
 /* The best unbroken run of a single day at a single spot. Shared by the week
    list and the day timeline so the two can never disagree about the window. */
-function dayWindowFor(entry, date) {
+function dayWindowFor(entry, date, allow) {
   var byHour = {}, peak = null;
+  var ok = function (r) { return r && !r.dark && (!allow || allow(r)); };
   entry.rows.forEach(function (r) {
     if (r.date !== date) return;
     byHour[r.hour] = r;
-    if (!r.dark && (!peak || r.score > peak.score)) peak = r;
+    if (ok(r) && (!peak || r.score > peak.score)) peak = r;
   });
   if (!peak) return null;
   var floorScore = Math.max(peak.score - 12, peak.score * 0.72);
-  var holds = function (h) { var r = byHour[h]; return r && !r.dark && r.score >= floorScore; };
+  var holds = function (h) { var r = byHour[h]; return ok(r) && r.score >= floorScore; };
   var from = peak.hour, to = peak.hour;
   while (from - 1 >= peak.hour - 6 && holds(from - 1)) from--;
   while (to + 1 <= peak.hour + 6 && holds(to + 1)) to++;
@@ -686,6 +704,7 @@ var S = {
   view: "now",
   sel: null,           /* {spotId, key} chosen from the grid or chart */
   filters: { boards: false, beginner: false, freePark: false, noRocks: false },
+  plan: null,          /* the last "just tell me" answer, kept across re-renders */
   bar: 62,             /* the score you personally think is worth the drive */
   err: null
 };
@@ -1119,6 +1138,7 @@ function confBadge(c) {
 
 function renderNow() {
   var host = $("#v-now"); host.innerHTML = "";
+  renderPlanCard(host);
   var pick = currentPick();
   if (!pick) { host.appendChild(el("p", "empty", "No forecast for this hour.")); return; }
   var sc = pick.row, spot = pick.entry.spot, b = band(sc.score);
@@ -1160,7 +1180,7 @@ function renderNow() {
   var suit = suitFor(sc.sst);
   stats.innerHTML =
     '<div class="stats">' +
-      stat("Wave", r1(sc.localHs) + " m", "at the beach · " + r1(sc.offshoreHs) + " m offshore") +
+      stat("Wave", mtr(sc.localHs), "at the beach · " + mtr(sc.offshoreHs) + " offshore") +
       stat("Period", (sc.tp == null ? "—" : Math.round(sc.tp) + " s"), sc.tp >= 11 ? "groundswell — real power" : sc.tp >= 8 ? "decent push" : "short, weak chop") +
       stat("Swell from", sc.swellDir == null ? "—" : compass(sc.swellDir) + " " + Math.round(sc.swellDir) + "°", sc.offBy > 0 ? Math.round(sc.offBy) + "° outside this beach's window" : "straight into the window") +
       stat("Wind", windLabel(sc, spot), sc.gust != null ? "gusting " + Math.round(sc.gust) + " kn" : "") +
@@ -1186,7 +1206,7 @@ function renderNow() {
   var P = sc.parts;
   why.innerHTML = '<h3>Why ' + sc.score + '</h3>' +
     '<div class="bars">' +
-      bar("Size", P.size, r1(sc.localHs) + " m vs a " + spot.best.min + "–" + spot.best.max + " m sweet spot") +
+      bar("Size", P.size, mtr(sc.localHs) + " vs a " + spot.best.min + "–" + spot.best.max + " m sweet spot") +
       bar("Wind", P.wind, windLabel(sc, spot)) +
       bar("Swell direction", P.dir, sc.offBy > 0 ? Math.round(sc.offBy) + "° off the window" : "inside the window") +
       bar("Period", P.period, (sc.tp == null ? "—" : Math.round(sc.tp) + " s") + " · needs " + spot.pmin + " s+") +
@@ -1292,7 +1312,7 @@ function renderNow() {
       return '<button class="win' + (r.score >= S.bar ? " win-hit" : "") + '" data-spot="' + esc(sp.id) + '" data-key="' + esc(r.key) + '">' +
         '<span class="win-score" style="background:' + col.bg + ';color:' + col.ink + '">' + r.score + '</span>' +
         '<span class="win-main"><b>' + dayLabel(d.date) + ' · ' + range + '</b>' +
-        '<span>' + esc(sp.name) + ' · peak ' + hhmm(r.hour) + ' · ' + r1(r.localHs) + ' m · ' + esc(windLabel(r, sp)) + '</span></span>' +
+        '<span>' + esc(sp.name) + ' · peak ' + hhmm(r.hour) + ' · ' + mtr(r.localHs) + ' · ' + esc(windLabel(r, sp)) + '</span></span>' +
         '<span class="win-tag">' + band(r.score).word + '<em class="c' + d.conf.level + '">' + d.conf.label.toLowerCase() + '</em></span></button>';
     }).join("") + '</div>';
   host.appendChild(nb);
@@ -1317,11 +1337,107 @@ function renderNow() {
   sh.innerHTML = '<h3>Send it to someone</h3>' +
     '<p class="foot">Copies a link straight to this beach at this hour, so whoever opens it lands on the same call rather than on today.</p>' +
     '<div class="shrow"><button id="shareBtn" class="btn">Copy link to this session</button>' +
-    '<span id="shareMsg" class="foot"></span></div>';
+    '<span class="foot sharemsg"></span></div>';
   host.appendChild(sh);
-  $("#shareBtn").addEventListener("click", function () { shareCurrent(spot, pick.key); });
+  $("#shareBtn").addEventListener("click", function () {
+    shareCurrent(spot, pick.key, $(".sharemsg", sh));
+  });
 
   startWaveLoop();
+}
+
+/* ── the one-button answer ──────────────────────────────────────────── */
+function renderPlanCard(host) {
+  var card = el("section", "card plan");
+  if (!S.plan) {
+    card.innerHTML = '<h3>Just tell me where to go</h3>' +
+      '<p class="foot">One answer instead of a dashboard: the best beach and hour in the next ' + DAYS +
+      ' days, picked only from hours you are actually allowed to ride in, with the reasoning behind it.</p>' +
+      '<div class="shrow"><button id="planBtn" class="btn btn-go">Plan my session</button>' +
+      '<span class="foot">uses your drive limit' + (S.maxDrive > 900 ? "" : " of " + S.maxDrive + " min") + '</span></div>';
+    host.appendChild(card);
+    $("#planBtn").addEventListener("click", function () { S.plan = recommend(); render(); });
+    return;
+  }
+
+  var P = S.plan;
+  if (!P || !P.pick) {
+    card.innerHTML = '<h3>Nothing to recommend</h3><p>No spot in range has a legal, rideable window in the next ' +
+      DAYS + ' days. Widen the drive limit, or wait for the next swell.</p>' +
+      '<div class="shrow"><button id="planBtn" class="btn">Try again</button></div>';
+    host.appendChild(card);
+    $("#planBtn").addEventListener("click", function () { S.plan = recommend(); render(); });
+    return;
+  }
+
+  var c = P.pick, r = c.win.peak, spot = c.spot;
+  var lv = leaveAt(spot, c.win.from);
+  var suit = suitFor(r.sst);
+  var rip = ripRisk(spot, r);
+  var col = scoreSolid(r.score);
+
+  card.innerHTML =
+    '<div class="plan-head"><h3>Go here</h3>' +
+      '<button id="planAgain" class="mini">re-plan</button></div>' +
+    (P.weak ? '<p class="plan-warn">Honestly, it is a poor week — nothing clears a real bar. This is the ' +
+      'least-bad session going, not a good one.</p>' : '') +
+    '<div class="plan-hero">' +
+      '<span class="plan-score" style="background:' + col.bg + ';color:' + col.ink + '">' + r.score + '</span>' +
+      '<div><b>' + esc(spot.name) + '</b>' +
+        '<span>' + esc(dayLabel(c.date)) + ' · ' + hhmm(c.win.from) + '–' + hhmm(c.win.to + 1) + '</span>' +
+        '<span>' + esc(spot.town) + ' · ' + spot.drive + ' min from Rota</span></div>' +
+    '</div>' +
+    '<div class="plan-line"><b>Leave at ' + lv.at + '</b> to be in the water for ' + hhmm(c.win.from) +
+      (lv.note ? ' (' + lv.note + ')' : '') + '. Best single hour is ' + hhmm(r.hour) + '.</div>' +
+    '<div class="plan-facts">' +
+      '<span>' + mtr(r.localHs) + '</span>' +
+      '<span>' + (r.tp == null ? "—" : Math.round(r.tp) + " s") + '</span>' +
+      '<span>' + esc(windLabel(r, spot)) + '</span>' +
+      '<span>water ' + (r.sst == null ? "—" : r1(r.sst) + " °C") + '</span>' +
+      '<span>tide ' + esc(tideLabel(r.tide)) + '</span>' +
+      '<span>rip ' + rip.label.toLowerCase() + '</span>' +
+    '</div>' +
+    '<div class="plan-why">' + c.reasons.map(function (x) {
+      return '<div class="rule"><b>' + esc(x.t) + '</b><p>' + esc(x.d) + '</p></div>';
+    }).join("") + '</div>' +
+    '<div class="rule"><b>Park</b><p>' + esc(spot.park.name) + ' — ' + esc(spot.park.cost) + ', ' +
+      esc(spot.park.walk) + ' walk. <a class="link" target="_blank" rel="noopener" ' +
+      'href="https://www.google.com/maps/dir/?api=1&destination=' + spot.park.lat + ',' + spot.park.lon +
+      '&travelmode=driving">Directions ↗</a></p></div>' +
+    '<div class="rule"><b>Wear and bring</b><p>' + esc(suit.suit) + '. ' +
+      esc(kitFor(r, spot).map(function (k) { return k.label; }).join(" · ")) + '.</p></div>' +
+    (rip.level >= 1
+      ? '<div class="rule law-rip' + rip.level + '"><b>Rip risk ' + rip.label.toLowerCase() + '</b><p>' +
+        esc(capitalise(rip.why)) + '.' + (rip.advice ? " " + esc(rip.advice) : "") + '</p></div>'
+      : '') +
+    (spot.hazards && spot.hazards.length
+      ? '<div class="rule"><b>Watch out for</b><p>' + esc(spot.hazards.join(" · ")) + '</p></div>'
+      : '') +
+    (spot.tip ? '<div class="rule"><b>Local knowledge</b><p>' + esc(spot.tip) + '</p></div>' : '') +
+    (P.alts.length ? '<div class="plan-alts"><span class="lbl">other options</span>' +
+      P.alts.map(function (a) {
+        return '<button class="alt" data-spot="' + esc(a.spot.id) + '" data-key="' + esc(a.win.peak.key) + '">' +
+          '<b>' + a.win.peak.score + '</b> ' + esc(dayLabel(a.date)) + ' ' + hhmm(a.win.from) + ' · ' +
+          esc(a.spot.name) + '</button>';
+      }).join("") + '</div>' : '') +
+    '<div class="shrow"><button id="planOpen" class="btn">Open this session</button>' +
+      '<button id="planShare" class="btn">Share it</button><span class="foot sharemsg"></span></div>';
+
+  host.appendChild(card);
+  $("#planAgain").addEventListener("click", function () { S.plan = recommend(); render(); });
+  $("#planOpen").addEventListener("click", function () {
+    S.spotId = spot.id; S.sel = { key: r.key }; render();
+  });
+  $("#planShare").addEventListener("click", function () {
+    shareCurrent(spot, r.key, $(".sharemsg", card));
+  });
+  $$(".alt", card).forEach(function (b) {
+    b.addEventListener("click", function () {
+      S.spotId = b.getAttribute("data-spot");
+      S.sel = { key: b.getAttribute("data-key") };
+      render();
+    });
+  });
 }
 
 function stat(k, v, note) {
@@ -1336,9 +1452,8 @@ function bar(k, v, note) {
 }
 
 /* Share a link that reopens this exact beach at this exact hour. */
-function shareCurrent(spot, key) {
+function shareCurrent(spot, key, msg) {
   var url = location.origin + location.pathname + "#" + spot.id + "/" + key;
-  var msg = $("#shareMsg");
   var done = function (t) { if (msg) { msg.textContent = t; setTimeout(function () { msg.textContent = ""; }, 2600); } };
   var title = spot.name + " — " + dayLabel(key.slice(0, 10)) + " " + key.slice(11, 16);
   if (navigator.share) {
@@ -1565,6 +1680,168 @@ function renderChart(pinned) {
   return card;
 }
 
+/* ═════════════════════════ "just tell me" ═════════════════════════
+   One answer instead of a dashboard: which beach, what time, and why that
+   one rather than the seventeen others. It only ever recommends hours you
+   are actually allowed to ride in, which in summer is the whole difficulty
+   — the best hours and the legal hours are not the same hours.            */
+
+function recommend() {
+  var cands = [];
+  spotsInRange().forEach(function (e) {
+    var spot = e.spot;
+    S.model.days.forEach(function (date) {
+      /* Only hours where a board is legal here: advice you cannot act on
+         is not advice. */
+      var legal = function (r) { return !boardRule(spot, date, r.hour).restricted; };
+      var win = dayWindowFor(e, date, legal);
+      if (!win) return;
+      var lead = out_leadHours(win.peak.key);
+      if (lead < -1) return;                       /* already gone */
+
+      var conf = confidenceOf(win.peak, win.peak.key);
+      var v = win.peak.score;
+      v -= Math.max(0, spot.drive - 20) * 0.07;    /* a long drive has to earn it */
+      v -= (3 - conf.level) * 4;                   /* prefer what we are sure of */
+      /* A session six days out has to be clearly better than one in two days,
+         not marginally: the near one is both likelier to happen and likelier
+         to be right. */
+      v -= clamp(lead, 0, 240) / 24 * 1.5;
+      cands.push({ entry: e, spot: spot, date: date, win: win, conf: conf, value: v, lead: lead });
+    });
+  });
+  if (!cands.length) return null;
+  cands.sort(function (a, b) { return b.value - a.value; });
+
+  /* One per day, so the alternatives are genuinely different options. */
+  var seen = {}, ranked = [];
+  cands.forEach(function (c) {
+    var k = c.spot.id + "|" + c.date;
+    if (seen[k]) return;
+    seen[k] = 1; ranked.push(c);
+  });
+  var pick = ranked[0];
+  pick.reasons = reasonsFor(pick);
+  return { pick: pick, alts: ranked.slice(1, 4), weak: pick.win.peak.score < 40 };
+}
+
+/* Which part of the score separates this spot from the field at that hour? */
+function edgeOver(pick) {
+  var key = pick.win.peak.key;
+  var rivals = spotsInRange()
+    .filter(function (e) { return e.spot.id !== pick.spot.id; })
+    .map(function (e) { return { e: e, r: rowAt(e, key) }; })
+    .filter(function (x) { return x.r; })
+    .sort(function (a, b) { return b.r.score - a.r.score; });
+  if (!rivals.length) return null;
+  var best = rivals[0];
+  var p = pick.win.peak.parts, q = best.r.parts;
+  var keys = ["size", "wind", "dir", "period", "tide"];
+  var top = null;
+  keys.forEach(function (k) {
+    var d = p[k] - q[k];
+    if (!top || d > top.d) top = { k: k, d: d };
+  });
+  return { rival: best.e.spot, rivalScore: best.r.score, part: top.k, gap: Math.round(top.d) };
+}
+
+function reasonsFor(c) {
+  var r = c.win.peak, spot = c.spot, out = [];
+  var dayRows = c.entry.rows.filter(function (x) { return x.date === c.date && !x.dark; });
+
+  /* — why here — */
+  var e = edgeOver(c);
+  if (r.score < 22) {
+    out.push({ t: "Why here", d: "Frankly, nothing in range is working — every beach is in single figures. " +
+      "This is the least bad of them, and it is a swim with a board rather than a surf." +
+      (e ? " Next best is " + e.rival.name + " on " + e.rivalScore + "." : "") });
+    out.push({ t: "Why then", d: "It is the best stretch of daylight on the least bad day." });
+    return out;
+  }
+  var near = spotsInRange().filter(function (x) { return x.spot.drive <= 20; })
+    .map(function (x) { return rowAt(x, r.key); }).filter(Boolean)
+    .reduce(function (a, x) { return !a || x.score > a.score ? x : a; }, null);
+  if (e && e.gap > 6) {
+    var WHY = {
+      size: "it is the only one with enough size in the water",
+      wind: "the wind is offshore here and not at the others",
+      dir: "this swell direction gets in here and is shadowed elsewhere",
+      period: "the swell has more push by the time it reaches this bank",
+      tide: "the tide suits this beach at that hour and not the others"
+    };
+    out.push({ t: "Why here", d: "Of the " + spotsInRange().length + " beaches in range, this one wins because " +
+      WHY[e.part] + ". Next best at that hour is " + e.rival.name + " on " + e.rivalScore + "." });
+  } else {
+    out.push({ t: "Why here", d: "It scores highest of the " + spotsInRange().length +
+      " beaches in range at that hour" + (e ? ", just ahead of " + e.rival.name + " on " + e.rivalScore : "") + "." });
+  }
+  if (spot.drive > 30 && near && near.score < r.score - 12) {
+    out.push({ t: "Worth the drive?", d: "Yes. Nothing within twenty minutes of Rota gets above " +
+      near.score + " out of 100 at that hour, against " + r.score + " here — that gap is what the " +
+      spot.drive + "-minute drive is buying." });
+  }
+
+  /* — why then — */
+  var why = [];
+  var winds = dayRows.map(function (x) { return x.wind; }).filter(function (v) { return v != null; });
+  if (r.wind != null && winds.length && r.wind <= Math.min.apply(null, winds) + 2) {
+    why.push("it is the lightest wind of the day");
+  } else if (r.wind != null && r.windDir != null && angDiff(r.windDir, spot.off) < 55) {
+    why.push("the wind is offshore then (" + Math.round(r.wind) + " kn " + compass(r.windDir) + ")");
+  }
+  var nx = nextTides(c.entry, r.key, 1);
+  if (nx.length) {
+    var moving = (r.tide.rising ? "filling toward " : "dropping toward ") + nx[0].type + " at " + nx[0].at;
+    /* Do not assert the tide suits the beach unless the score agrees — this
+       beach may well want the opposite half of the cycle. */
+    if (r.parts.tide >= 65) why.push("the tide is " + moving + ", which is what this beach wants");
+    else if (r.parts.tide >= 45) why.push("the tide is " + moving + ", which this beach can work with");
+  }
+  var law = boardRule(spot, c.date, r.hour);
+  if (spot.bb.status === "seasonal" && inBathingSeason(c.date)) {
+    why.push(r.hour < GUARD_ON
+      ? "and you are in before the lifeguard towers open at " + pad(GUARD_ON) + ":00"
+      : "and the towers have shut for the day");
+  }
+  if (!why.length) {
+    var dayBest = dayRows.reduce(function (a, x) { return !a || x.score > a.score ? x : a; }, null);
+    why.push(dayBest && dayBest.hour === r.hour
+      ? "it is simply the best stretch of daylight that day"
+      : "it is the longest run of workable hours that day");
+  }
+  out.push({ t: "Why then", d: capitalise(why.join(", ")) + "." });
+
+  /* — the honest caveat — */
+  var parts = r.parts, weakest = null;
+  ["size", "wind", "dir", "period", "tide"].forEach(function (k) {
+    if (!weakest || parts[k] < parts[weakest]) weakest = k;
+  });
+  var WEAK = {
+    size: "the size is the weak link — it is small even for here",
+    wind: "the wind is the weak link",
+    dir: "the swell is not square to this beach",
+    period: "the period is short, so there is less push than the height suggests",
+    tide: "the tide is wrong for this beach at that hour — it likes the " + spot.tide +
+          ", and you will be getting the other half of the cycle"
+  };
+  if (parts[weakest] < 55) out.push({ t: "The catch", d: capitalise(WEAK[weakest]) + "." });
+  if (c.conf.level < 3) {
+    out.push({ t: "How sure", d: c.conf.label + " confidence, " + c.conf.why + ". " +
+      (c.lead > 72 ? "That is " + Math.round(c.lead / 24) + " days out — treat it as a plan and check again the morning before."
+                   : "Worth a second look before you load the car.") });
+  }
+  return out;
+}
+function capitalise(t) { return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; }
+
+/* What time to pull out of the drive, so you are in the water at the start. */
+function leaveAt(spot, hour) {
+  var mins = hour * 60 - spot.drive - 15;          /* 15 min to change and walk down */
+  var d = mins < 0 ? "the night before" : null;
+  mins = ((mins % 1440) + 1440) % 1440;
+  return { at: pad(Math.floor(mins / 60)) + ":" + pad(mins % 60), note: d };
+}
+
 /* ═══════════════════════ deep links + the map ═══════════════════════ */
 
 var KEY_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
@@ -1642,7 +1919,7 @@ function buildMap(key) {
       icon: icon, title: e.spot.name, zIndexOffset: Math.round(shown) + (on ? 500 : 0)
     }).addTo(mapObj);
     m.bindPopup('<b>' + esc(e.spot.name) + '</b><br>' + esc(e.spot.town) + ' · ' + e.spot.drive + ' min<br>' +
-      r1(r.localHs) + ' m · ' + esc(windLabel(r, e.spot)) + '<br><i>' + band(r.score).word + '</i>');
+      mtr(r.localHs) + ' · ' + esc(windLabel(r, e.spot)) + '<br><i>' + band(r.score).word + '</i>');
     m.on("click", function () { S.spotId = e.spot.id; setView("now"); });
     pts.push([e.spot.lat, e.spot.lon]);
   });
@@ -1752,7 +2029,7 @@ function spotCard(spot, sc) {
         '<p class="sub">' + esc(spot.town) + ' · ' + spot.drive + ' min · ' + esc(spot.type) + ' · ' + esc(spot.level) + '</p></div>' +
       '<span class="bb bb-' + tag.c + '">' + tag.t + '</span>' +
     '</div>' +
-    '<p class="spot-now">' + r1(sc.localHs) + ' m · ' + (sc.tp == null ? "—" : Math.round(sc.tp) + ' s') +
+    '<p class="spot-now">' + mtr(sc.localHs) + ' · ' + (sc.tp == null ? "—" : Math.round(sc.tp) + ' s') +
       ' · ' + esc(windLabel(sc, spot)) + ' · tide ' + esc(tideLabel(sc.tide)) + ' · <b>' + b.word + '</b></p>' +
     '<details><summary>Parking, rules, hazards</summary>' +
       '<div class="sec"><b class="lbl">Park here</b><p>' + esc(spot.park.name) + '</p>' +
