@@ -13,6 +13,11 @@
 <link rel="preconnect" href="https://marine-api.open-meteo.com">
 <link rel="preconnect" href="https://api.open-meteo.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wave Watch">
 <style>
 /* ───────────────────────────── tokens ───────────────────────────── */
 :root{
@@ -259,6 +264,46 @@ details[open]>summary:before{content:"▾ "}
 .src-ok:before{background:var(--good)} .src-bad:before{background:var(--bad)}
 .srclist span{font-size:11.5px;color:var(--muted)}
 
+
+/* ───────────────────────── chips, rules, tides ───────────────────────── */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{font-size:11.5px;border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--ink-2);
+  background:var(--sunk);white-space:nowrap}
+.chip-warn{color:var(--warn);border-color:currentColor;background:transparent}
+.chip-ok{color:var(--good);border-color:currentColor;background:transparent}
+.chip-rip0{color:var(--good)} .chip-rip1{color:var(--warn)} .chip-rip2{color:var(--bad)}
+.chip-rip1,.chip-rip2{border-color:currentColor;background:transparent}
+.law{border-left:3px solid var(--line);padding:2px 0 2px 10px;margin-top:11px}
+.law b{font-size:13.5px;display:block}
+.law p{margin:2px 0 0;font-size:13px;color:var(--ink-2)}
+.law-ok{border-color:var(--good)} .law-warn{border-color:var(--warn)}
+.law-rip0{border-color:var(--good)} .law-rip1{border-color:var(--warn)} .law-rip2{border-color:var(--bad)}
+.tidetable{margin-top:13px;border-top:1px solid var(--line-2);padding-top:10px}
+.tt{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
+.tt span{font-family:"IBM Plex Mono",monospace;font-size:11.5px;border:1px solid var(--line);
+  border-radius:8px;padding:4px 8px;background:var(--sunk);white-space:nowrap}
+.tt b{font-weight:600} .tt em{font-style:normal;color:var(--muted)}
+.tt-h{color:var(--teal)} .tt-l{color:var(--amber)}
+.win-tag em{display:block;font-style:normal;font-size:9px;letter-spacing:.06em;text-transform:uppercase;opacity:.75}
+.win-tag em.c3{color:var(--good)} .win-tag em.c2{color:var(--warn)} .win-tag em.c1{color:var(--bad)}
+.win-none{opacity:.55}
+.shrow{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.btn{border:1px solid var(--teal);color:var(--teal);border-radius:999px;padding:7px 15px;font-size:13px;
+  font-weight:500;background:transparent}
+.btn:active{background:var(--sunk)}
+
+/* ───────────────────────────── map ───────────────────────────── */
+.mapbox{height:280px;border-radius:10px;overflow:hidden;border:1px solid var(--line);margin-top:10px;
+  background:var(--sunk);z-index:0}
+.leaflet-container{font:inherit;background:var(--sunk)}
+.mpin{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;
+  font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+  box-shadow:0 0 0 2px var(--panel),0 2px 6px rgba(0,0,0,.45)}
+.mpin-on{box-shadow:0 0 0 3px var(--amber-b),0 2px 8px rgba(0,0,0,.45)}
+.mpark{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;background:var(--amber);
+  color:#fff;font-weight:700;font-size:12px;box-shadow:0 0 0 2px var(--panel)}
+.leaflet-popup-content{font-size:12.5px;line-height:1.45}
+
 /* ───────────────────────────── tabs ───────────────────────────── */
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--panel);
   border-top:1px solid var(--line);padding:6px 8px calc(6px + var(--sab));
@@ -329,6 +374,7 @@ details[open]>summary:before{content:"▾ "}
   </button>
 </nav>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="./data.js"></script>
 <script src="./app.js"></script>
 </body>

@@ -24,7 +24,7 @@ window.__SURF_SPOTS__ = [
 /* ══════════════ ROTA — walk or five minutes in the car ══════════════ */
 {
   id: "costilla", name: "Playa de la Costilla", town: "Rota", zone: "Rota",
-  lat: 36.6248, lon: -6.3663, mlat: 36.612, mlon: -6.398,
+  lat: 36.6186, lon: -6.3623, mlat: 36.5954, mlon: -6.4036,
   face: 235, win: [200, 285], off: 55, exposure: 0.45,
   type: "beach break", bottom: "sand", best: { min: 0.6, max: 1.8, ideal: 1.1 },
   pmin: 7, tide: "mid", shore: true, level: "beginner", drive: 5,
@@ -35,7 +35,7 @@ window.__SURF_SPOTS__ = [
   },
   park: {
     name: "Plaza Bartolomé Pérez underground + Av. de la Marina street",
-    lat: 36.6236, lon: -6.3639, cost: "Street free · underground ~€1.20/h",
+    lat: 36.6167, lon: -6.3579, cost: "Street free · underground ~€1.20/h",
     walk: "2–4 min", note: "Street parking behind the paseo is gone by 10:00 in July and August; the underground car park almost always has space and puts you 200 m from the sand."
   },
   kit: ["Nothing special — you can walk here"],
@@ -45,7 +45,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "candor", name: "Punta Candor / El Rompidillo", town: "Rota", zone: "Rota",
-  lat: 36.6389, lon: -6.3923, mlat: 36.645, mlon: -6.425,
+  lat: 36.6389, lon: -6.3923, mlat: 36.6375, mlon: -6.4427,
   face: 268, win: [235, 315], off: 88, exposure: 0.62,
   type: "reef + sand", bottom: "flat rock shelf and sand", best: { min: 0.7, max: 2.0, ideal: 1.2 },
   pmin: 8, tide: "high", shore: false, level: "intermediate", drive: 10,
@@ -70,7 +70,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "aguadulce", name: "Playa de Aguadulce", town: "Rota", zone: "Rota",
-  lat: 36.6516, lon: -6.4074, mlat: 36.658, mlon: -6.440,
+  lat: 36.6311, lon: -6.3781, mlat: 36.6227, mlon: -6.4274,
   face: 258, win: [230, 310], off: 78, exposure: 0.58,
   type: "beach break", bottom: "sand over rock patches", best: { min: 0.7, max: 1.9, ideal: 1.2 },
   pmin: 8, tide: "mid", shore: true, level: "intermediate", drive: 13,
@@ -78,7 +78,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Quiet stretch with no buoyed bathing corridor for most of its length — boards are fine. Lifeguarded section in high summer follows the usual 15 Jun–15 Sep zone rule." },
   park: {
     name: "Sandy lot at the end of the Aguadulce access track",
-    lat: 36.6503, lon: -6.4043, cost: "Free", walk: "3 min",
+    lat: 36.6315, lon: -6.3757, cost: "Free", walk: "3 min",
     note: "Small — maybe twenty cars. Empty outside July/August. Soft sand at the edges; stay on the packed line."
   },
   kit: ["Booties if the tide is dropping"],
@@ -88,7 +88,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "ballena", name: "Playa de la Ballena", town: "Rota", zone: "Rota",
-  lat: 36.6698, lon: -6.4210, mlat: 36.678, mlon: -6.455,
+  lat: 36.681, lon: -6.416, mlat: 36.6685, mlon: -6.464,
   face: 252, win: [228, 305], off: 72, exposure: 0.60,
   type: "beach break", bottom: "sand", best: { min: 0.7, max: 2.0, ideal: 1.2 },
   pmin: 8, tide: "all", shore: true, level: "beginner", drive: 16,
@@ -96,7 +96,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Lifeguarded and buoyed in front of the main access points 15 Jun–15 Sep; walk two minutes up the beach and you are outside the zone. Off-season it is unrestricted." },
   park: {
     name: "Pine-shaded lots off the Costa Ballena access roads",
-    lat: 36.6685, lon: -6.4176, cost: "Free", walk: "4–6 min over the boardwalk",
+    lat: 36.6816, lon: -6.4137, cost: "Free", walk: "4–6 min over the boardwalk",
     note: "Genuinely big, genuinely free, and shaded by umbrella pines — the most civilised car park on this list. Multiple entrances; the northern ones are quieter."
   },
   kit: ["Sandals — the boardwalk is long and hot"],
@@ -108,7 +108,7 @@ window.__SURF_SPOTS__ = [
 /* ══════════════ THE NEXT BAY — 20–40 minutes ══════════════ */
 {
   id: "chipiona", name: "Playa de las Tres Piedras", town: "Chipiona", zone: "Costa Noroeste",
-  lat: 36.7420, lon: -6.4380, mlat: 36.752, mlon: -6.478,
+  lat: 36.695, lon: -6.4248, mlat: 36.6894, mlon: -6.4748,
   face: 262, win: [235, 320], off: 82, exposure: 0.66,
   type: "beach break", bottom: "sand and rock", best: { min: 0.6, max: 1.8, ideal: 1.1 },
   pmin: 7, tide: "mid", shore: true, level: "intermediate", drive: 22,
@@ -116,7 +116,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Outside the town bathing zones. Boards fine; the ordinance bans them only inside the marked swimming areas in season." },
   park: {
     name: "Street parking along the Tres Piedras seafront",
-    lat: 36.7407, lon: -6.4356, cost: "Free", walk: "1–3 min",
+    lat: 36.6953, lon: -6.4224, cost: "Free", walk: "1–3 min",
     note: "Ordinary residential street parking — easy nine months of the year, tight in August. No lot, so park considerately."
   },
   kit: ["Booties"],
@@ -126,7 +126,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "fuentebravia", name: "Fuentebravía / La Muralla", town: "El Puerto de Santa María", zone: "Bay of Cádiz",
-  lat: 36.5720, lon: -6.2600, mlat: 36.566, mlon: -6.300,
+  lat: 36.6098, lon: -6.2861, mlat: 36.5908, mlon: -6.3306,
   face: 242, win: [215, 285], off: 62, exposure: 0.42,
   type: "beach break", bottom: "sand with rock outcrops", best: { min: 0.9, max: 2.2, ideal: 1.4 },
   pmin: 8, tide: "mid", shore: true, level: "intermediate", drive: 22,
@@ -134,7 +134,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Small coves with buoyed swim zones in summer. Early morning or out of season and there is no issue." },
   park: {
     name: "Street parking in the Fuentebravía urbanización",
-    lat: 36.5708, lon: -6.2575, cost: "Free", walk: "3–5 min plus steps down",
+    lat: 36.6107, lon: -6.2839, cost: "Free", walk: "3–5 min plus steps down",
     note: "Residential streets above the cliff. There is no real car park — you park on the road and walk down. Do not block the private driveways; they do get towed."
   },
   kit: ["Booties for the rocks at the ends"],
@@ -144,7 +144,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "santacatalina", name: "Playa de Santa Catalina", town: "El Puerto de Santa María", zone: "Bay of Cádiz",
-  lat: 36.5843, lon: -6.2480, mlat: 36.580, mlon: -6.290,
+  lat: 36.5956, lon: -6.2741, mlat: 36.5804, mlon: -6.3208,
   face: 248, win: [220, 290], off: 68, exposure: 0.40,
   type: "beach break", bottom: "sand", best: { min: 1.0, max: 2.3, ideal: 1.5 },
   pmin: 8, tide: "mid", shore: true, level: "beginner", drive: 24,
@@ -152,7 +152,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Urban lifeguarded beach — boards out of the buoyed zone 15 Jun–15 Sep during tower hours." },
   park: {
     name: "Lot by the Castillo de Santa Catalina",
-    lat: 36.5836, lon: -6.2455, cost: "Free", walk: "2 min",
+    lat: 36.5963, lon: -6.2718, cost: "Free", walk: "2 min",
     note: "Decent-sized free lot next to the fort. Fills on summer weekends but turns over quickly."
   },
   kit: [],
@@ -164,7 +164,7 @@ window.__SURF_SPOTS__ = [
 /* ══════════════ CÁDIZ — the city beaches, 35–45 minutes ══════════════ */
 {
   id: "victoria", name: "Playa de la Victoria", town: "Cádiz", zone: "Cádiz",
-  lat: 36.5063, lon: -6.2650, mlat: 36.500, mlon: -6.300,
+  lat: 36.5062, lon: -6.2793, mlat: 36.4791, mlon: -6.3167,
   face: 228, win: [195, 275], off: 48, exposure: 0.52,
   type: "beach break", bottom: "sand", best: { min: 0.8, max: 2.2, ideal: 1.3 },
   pmin: 8, tide: "mid", shore: true, level: "beginner", drive: 38,
@@ -172,7 +172,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Cádiz runs a proper municipal beach ordinance: no boards inside the buoyed bathing zone in season during lifeguard hours, with marked entry corridors at some access points. Early mornings are the accepted window." },
   park: {
     name: "Blue-zone street parking on Paseo Marítimo",
-    lat: 36.5054, lon: -6.2626, cost: "Paid blue zone ~€1/h, free 14:00–16:30 and after 21:00",
+    lat: 36.5075, lon: -6.2775, cost: "Paid blue zone ~€1/h, free 14:00–16:30 and after 21:00",
     walk: "1 min", note: "Pay-and-display along the whole seafront. If you want free, drive on to Cortadura — three minutes further and the lot there costs nothing."
   },
   kit: ["Parking coins or the app"],
@@ -182,7 +182,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "cortadura", name: "Playa de Cortadura", town: "Cádiz", zone: "Cádiz",
-  lat: 36.4840, lon: -6.2470, mlat: 36.478, mlon: -6.288,
+  lat: 36.4877, lon: -6.2673, mlat: 36.4576, mlon: -6.301,
   face: 222, win: [190, 270], off: 42, exposure: 0.56,
   type: "beach break", bottom: "sand", best: { min: 0.8, max: 2.4, ideal: 1.4 },
   pmin: 8, tide: "low", shore: true, level: "intermediate", drive: 40,
@@ -190,7 +190,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Largely unbuilt and only lifeguarded in part, so boards are fine along most of its length year-round." },
   park: {
     name: "Free lots along the Cortadura seafront, off the N-443",
-    lat: 36.4832, lon: -6.2448, cost: "Free", walk: "2 min over the dune boardwalk",
+    lat: 36.4892, lon: -6.2657, cost: "Free", walk: "2 min over the dune boardwalk",
     note: "Long strip of free lots with space even in August. This is the best free parking anywhere on the Cádiz isthmus."
   },
   kit: ["Fin tethers — there is real current here"],
@@ -200,7 +200,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "caleta", name: "La Caleta", town: "Cádiz", zone: "Cádiz",
-  lat: 36.5297, lon: -6.3060, mlat: 36.538, mlon: -6.330,
+  lat: 36.5297, lon: -6.306, mlat: 36.5449, mlon: -6.3527,
   face: 292, win: [265, 330], off: 112, exposure: 0.30,
   type: "small bay", bottom: "sand between two forts", best: { min: 1.4, max: 3.0, ideal: 2.0 },
   pmin: 9, tide: "high", shore: true, level: "beginner", drive: 45,
@@ -220,7 +220,7 @@ window.__SURF_SPOTS__ = [
 /* ══════════════ THE GOOD STUFF — south of the bay, 45–90 minutes ══════════════ */
 {
   id: "barrosa", name: "Playa de la Barrosa", town: "Chiclana", zone: "Costa de la Luz",
-  lat: 36.3620, lon: -6.1650, mlat: 36.352, mlon: -6.205,
+  lat: 36.3432, lon: -6.167, mlat: 36.3113, mlon: -6.1979,
   face: 218, win: [190, 270], off: 38, exposure: 0.68,
   type: "beach break", bottom: "sand", best: { min: 0.7, max: 2.2, ideal: 1.3 },
   pmin: 8, tide: "mid", shore: true, level: "beginner", drive: 48,
@@ -228,7 +228,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Chiclana buoys off the developed sections in summer. The southern end towards the Torre del Puerco is wilder and unrestricted." },
   park: {
     name: "Sector 5 / Torre del Puerco lots, Novo Sancti Petri",
-    lat: 36.3565, lon: -6.1600, cost: "Free (some paid overflow in August)", walk: "3–5 min",
+    lat: 36.3325, lon: -6.164, cost: "Free (some paid overflow in August)", walk: "3–5 min",
     note: "Big sandy lots at the southern accesses. The southern end is both the better wave and the easier parking — drive past the hotels."
   },
   kit: [],
@@ -238,7 +238,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "roqueo", name: "El Roqueo / Fuente del Gallo", town: "Conil de la Frontera", zone: "Costa de la Luz",
-  lat: 36.2860, lon: -6.1020, mlat: 36.278, mlon: -6.145,
+  lat: 36.2899, lon: -6.1093, mlat: 36.2684, mlon: -6.1519,
   face: 238, win: [210, 300], off: 58, exposure: 0.78,
   type: "beach break with reef", bottom: "sand over rock", best: { min: 0.7, max: 2.2, ideal: 1.3 },
   pmin: 8, tide: "mid", shore: true, level: "intermediate", drive: 62,
@@ -246,7 +246,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Cliff-backed coves outside Conil's main buoyed beach — no seasonal board ban in practice." },
   park: {
     name: "Cliff-top lots at Fuente del Gallo",
-    lat: 36.2848, lon: -6.0995, cost: "Free", walk: "4 min plus a staircase",
+    lat: 36.2909, lon: -6.1072, cost: "Free", walk: "4 min plus a staircase",
     note: "Gravel lots on the clifftop. Fine outside August; in August Conil is chaos and you want to arrive before 10:00."
   },
   kit: ["Booties", "Fin tethers"],
@@ -256,7 +256,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "elpalmar", name: "Playa de El Palmar", town: "Vejer de la Frontera", zone: "Costa de la Luz",
-  lat: 36.2290, lon: -6.0350, mlat: 36.218, mlon: -6.085,
+  lat: 36.2253, lon: -6.0662, mlat: 36.2082, mlon: -6.1117,
   face: 245, win: [210, 310], off: 65, exposure: 1.00,
   type: "beach break", bottom: "sand", best: { min: 0.6, max: 2.5, ideal: 1.4 },
   pmin: 7, tide: "low", shore: true, level: "all", drive: 72,
@@ -267,7 +267,7 @@ window.__SURF_SPOTS__ = [
   },
   park: {
     name: "Dirt strip along the A-2233 beach road",
-    lat: 36.2300, lon: -6.0330, cost: "Free, though attendants ask €3–5 in summer",
+    lat: 36.2261, lon: -6.064, cost: "Free, though attendants ask €3–5 in summer",
     walk: "1–2 min", note: "Kilometres of roadside dirt parking right behind the beach — you can check the waves from the car. In July and August informal attendants wave you into spaces for a few euros; it is not official, and it is easier to just pay it."
   },
   kit: ["Fins", "Fin tethers", "Wax or deck grip", "Cash for the parking guy in summer"],
@@ -277,7 +277,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "canos", name: "Los Caños de Meca", town: "Barbate", zone: "Costa de la Luz",
-  lat: 36.1870, lon: -5.9950, mlat: 36.170, mlon: -6.030,
+  lat: 36.1848, lon: -6.0323, mlat: 36.1459, mlon: -6.0461,
   face: 196, win: [230, 300], off: 250, exposure: 0.55,
   type: "reef and beach", bottom: "rock reef and sand", best: { min: 1.4, max: 4.0, ideal: 2.2 },
   pmin: 10, tide: "mid", shore: false, level: "advanced", drive: 82,
@@ -289,7 +289,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Wild, cliff-backed and mostly unlifeguarded. No board restrictions; the constraint is the reef, not the ordinance." },
   park: {
     name: "Roadside along the Caños seafront and the Faro de Trafalgar track",
-    lat: 36.1861, lon: -5.9932, cost: "Free", walk: "2–8 min depending where you squeeze in",
+    lat: 36.1867, lon: -6.0316, cost: "Free", walk: "2–8 min depending where you squeeze in",
     note: "Narrow village road with no real lot. Arrive early on a good swell or you will be walking fifteen minutes. The Trafalgar lighthouse track has more space."
   },
   kit: ["Reef booties — not optional", "Impact vest on the bigger days", "Fin tethers"],
@@ -299,7 +299,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "zahara", name: "Playa de Zahara de los Atunes", town: "Barbate", zone: "Costa de la Luz",
-  lat: 36.1380, lon: -5.8480, mlat: 36.122, mlon: -5.880,
+  lat: 36.1544, lon: -5.8697, mlat: 36.1187, mlon: -5.8932,
   face: 208, win: [195, 275], off: 28, exposure: 0.62,
   type: "beach break", bottom: "sand", best: { min: 1.0, max: 2.6, ideal: 1.6 },
   pmin: 9, tide: "mid", shore: true, level: "intermediate", drive: 96,
@@ -307,7 +307,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "seasonal", rule: "Buoyed zone in front of the village in summer; the beach runs for kilometres and the rest is open." },
   park: {
     name: "Lots at the village entrance and along the Atlanterra road",
-    lat: 36.1368, lon: -5.8455, cost: "Free", walk: "3–6 min",
+    lat: 36.1561, lon: -5.8685, cost: "Free", walk: "3–6 min",
     note: "Plenty of free space outside August. In August Zahara is a destination town and parking is genuinely painful."
   },
   kit: ["Windproof jacket — the Levante here is relentless"],
@@ -317,7 +317,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "bolonia", name: "Playa de Bolonia", town: "Tarifa", zone: "Strait",
-  lat: 36.0900, lon: -5.7730, mlat: 36.075, mlon: -5.790,
+  lat: 36.0822, lon: -5.764, mlat: 36.0433, mlon: -5.7778,
   face: 196, win: [190, 265], off: 16, exposure: 0.50,
   type: "beach break", bottom: "sand", best: { min: 1.2, max: 3.0, ideal: 1.8 },
   pmin: 9, tide: "mid", shore: true, level: "intermediate", drive: 108,
@@ -325,7 +325,7 @@ window.__SURF_SPOTS__ = [
   bb: { ok: true, status: "open", rule: "Natural park beach, no board restrictions. Roman ruins at the back have their own opening hours if you want to combine the trip." },
   park: {
     name: "Lot at the Baelo Claudia end of the Bolonia access road",
-    lat: 36.0888, lon: -5.7705, cost: "Free", walk: "3 min",
+    lat: 36.0841, lon: -5.7633, cost: "Free", walk: "3 min",
     note: "Sandy lots behind the dune. Fine except at the very peak of August."
   },
   kit: [],
@@ -335,7 +335,7 @@ window.__SURF_SPOTS__ = [
 },
 {
   id: "loslances", name: "Playa de Los Lances", town: "Tarifa", zone: "Strait",
-  lat: 36.0290, lon: -5.6280, mlat: 36.015, mlon: -5.650,
+  lat: 36.029, lon: -5.628, mlat: 36.0009, mlon: -5.664,
   face: 226, win: [200, 280], off: 46, exposure: 0.48,
   type: "beach break", bottom: "sand", best: { min: 1.0, max: 2.8, ideal: 1.6 },
   pmin: 8, tide: "mid", shore: true, level: "intermediate", drive: 115,
