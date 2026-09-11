@@ -1907,14 +1907,19 @@ function intelHtml(text, model) {
 var INTEL_BLURB = 'Water quality and medusas, today’s flag and tower situation, the car park, and ' +
   'whether the bank has moved — the things four weather models cannot tell you.';
 
+/* One attempt per beach per day per session, so flicking between spots cannot
+   fire a queue of requests. The Worker caches six hours on its side as well. */
+var intelTried = {};
+
 function renderIntelCard(host, spot, sc) {
   var card = el("section", "card intel");
   var c = cfg();
   var cachedHit = intelGet(spot.id, sc.date);
-  var head = '<div class="plan-head"><h3>Live check · ' + esc(spot.name) + '</h3>' +
-    '<button class="mini" id="intelCfg">settings</button></div>';
+  var head = '<div class="plan-head"><h3>Live check · ' + esc(spot.name) + '</h3></div>';
 
   if (!c.api) {
+    /* Only reachable in a fork with no Worker configured — config.js carries
+       the URL for this site. */
     card.innerHTML = head +
       '<p class="foot">The rest of this page needs no key and never will. This one card asks Claude to ' +
       'search the web for what the models cannot know at this beach. It needs the Cloudflare Worker that ' +
@@ -1922,7 +1927,6 @@ function renderIntelCard(host, spot, sc) {
       '<div class="shrow"><button class="btn" id="intelSetup">Point it at my Worker</button></div>';
     host.appendChild(card);
     $("#intelSetup").addEventListener("click", openCfgDialog);
-    $("#intelCfg").addEventListener("click", openCfgDialog);
     return;
   }
 
@@ -1930,13 +1934,24 @@ function renderIntelCard(host, spot, sc) {
     card.innerHTML = head + intelHtml(cachedHit.text, cachedHit.model) +
       '<div class="shrow"><button class="btn" id="intelGo">Check again ↻</button>' +
       '<span class="foot">last checked ' + agoLabel(cachedHit.at) + '</span></div>';
-  } else {
-    card.innerHTML = head + '<p class="foot">' + INTEL_BLURB + '</p>' +
-      '<div class="shrow"><button class="btn btn-go" id="intelGo">Check this beach now</button></div>';
+    host.appendChild(card);
+    $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
+    return;
   }
+
+  /* Nothing cached: just go and get it. Making someone find and press a
+     button for the one thing on the page they cannot work out themselves
+     was the wrong call. */
+  var once = spot.id + "|" + sc.date;
+  card.innerHTML = head + '<p class="foot">' + INTEL_BLURB + '</p>' +
+    '<div class="shrow"><button class="btn btn-go" id="intelGo">Check this beach now</button></div>';
   host.appendChild(card);
-  $("#intelCfg").addEventListener("click", openCfgDialog);
   $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
+
+  if (!intelTried[once]) {
+    intelTried[once] = true;
+    askIntel(card, spot, sc);
+  }
 }
 
 function agoLabel(at) {
@@ -1948,10 +1963,8 @@ function agoLabel(at) {
 
 function askIntel(card, spot, sc) {
   var c = cfg();
-  var head = '<div class="plan-head"><h3>Live check · ' + esc(spot.name) + '</h3>' +
-    '<button class="mini" id="intelCfg">settings</button></div>';
+  var head = '<div class="plan-head"><h3>Live check · ' + esc(spot.name) + '</h3></div>';
   card.innerHTML = head + '<p class="intel-load"><span class="spinner sm"></span> Asking Claude to search the web…</p>';
-  $("#intelCfg").addEventListener("click", openCfgDialog);
 
   var summary = mtr(sc.localHs) + " at " + (sc.tp == null ? "?" : Math.round(sc.tp) + " s") +
     ", " + windLabel(sc, spot) + ", tide " + tideLabel(sc.tide) +
@@ -1972,7 +1985,7 @@ function askIntel(card, spot, sc) {
   }, function () {
     /* fetch() rejects with a bare "Failed to fetch" for DNS, CORS, a wrong
        URL and being offline alike, which tells nobody anything. */
-    throw new Error("the Worker did not answer. Check the URL in settings, or you may be offline");
+    throw new Error("it did not answer — you are probably offline");
   })
   .then(function (d) {
     if (d && d.text) {
@@ -1986,16 +1999,12 @@ function askIntel(card, spot, sc) {
         'Everything else on this page works regardless.</p>' +
         '<div class="shrow"><button class="btn" id="intelGo">Try again</button></div>';
     }
-    $("#intelCfg").addEventListener("click", openCfgDialog);
     $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
   })
   .catch(function (err) {
-    card.innerHTML = head + '<p>Could not reach the intel service — ' + esc(err.message) + '.</p>' +
-      '<div class="shrow"><button class="btn" id="intelGo">Try again</button>' +
-      '<button class="btn" id="intelSetup">Settings</button></div>';
-    $("#intelCfg").addEventListener("click", openCfgDialog);
+    card.innerHTML = head + '<p>Could not reach the live check — ' + esc(err.message) + '.</p>' +
+      '<div class="shrow"><button class="btn" id="intelGo">Try again</button></div>';
     $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
-    $("#intelSetup").addEventListener("click", openCfgDialog);
   });
 }
 
@@ -2436,6 +2445,9 @@ document.addEventListener("DOMContentLoaded", function () {
       }));
     } catch (e) { /* private mode — the setting simply will not stick */ }
     $("#cfg").hidden = true;
+    /* Saving settings should visibly do something: forget this session's
+       attempts so the live check runs again against the new endpoint. */
+    intelTried = {};
     render();
   });
   $("#cfg").addEventListener("click", function (e) { if (e.target === $("#cfg")) $("#cfg").hidden = true; });
