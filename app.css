@@ -368,7 +368,6 @@ a.txt, a.txt:hover { color: inherit; }
 }
 @media (min-width: 620px) { .tools { grid-template-columns: 1fr 1fr; } }
 .tool {
-  position: relative;
   display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
@@ -382,11 +381,12 @@ a.txt, a.txt:hover { color: inherit; }
   font-size: 19px; line-height: 1.15; letter-spacing: .01em;
 }
 .tool span:not(.tool-ico) { font-size: 12.5px; line-height: 1.45; color: var(--color-neutral-800); }
+/* The badge sits in the flow under the description rather than floating in
+   the corner — cornering it meant padding the heading clear of it, which
+   wrapped the title. */
 .tool em {
-  position: absolute; top: var(--space-3); right: var(--space-3);
+  grid-column: 2; margin-top: var(--space-1);
   font-style: normal; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
   color: var(--color-neutral-600);
 }
-/* the badge is absolutely positioned, so the heading has to keep clear of it */
-.tool-here b { padding-right: 92px; }
 .tool-here { opacity: .82; }
