@@ -4,7 +4,7 @@ Cheap stays, cheap flights and a day-by-day plan for the **Naval Station Rota, S
 
 Static frontend on **GitHub Pages**. All API keys live in a **Cloudflare Worker** you deploy once. Friends just open the link.
 
-**Also on this site: [Hike Finder](hikes/)** — 100 walks across Spain on a terrain map, each with the car park, the walking time, whether it is open right now and a live web-search check. And **[Rota Range Rings](rings/)** — a drive-time chart of 154 remote, cool, easy trips from Rota. Rings are hours of driving; every pin opens a super-simple brief (what it is, the one thing to do, parking in one line — the deep detail folds away), with a first-load tutorial, a 🎲 surprise-me button, saved places, a smart type-in filter (`"castles in france under 12 h"`), and a **Live intel** card that asks Claude — through the same Worker (`POST /api/spot`, web search, cached 12 h) — what's happening at a destination right now.
+**Also on this site: [Wave Watch](surf/)** — live bodyboarding conditions for Rota and the Gulf of Cádiz: a score per hour for seventeen beaches, a week-long grid of when to go, where to park at each one, whether boards are allowed that day, and what thickness of wetsuit the water actually wants. **[Hike Finder](hikes/)** — 100 walks across Spain on a terrain map, each with the car park, the walking time, whether it is open right now and a live web-search check. And **[Rota Range Rings](rings/)** — a drive-time chart of 154 remote, cool, easy trips from Rota. Rings are hours of driving; every pin opens a super-simple brief (what it is, the one thing to do, parking in one line — the deep detail folds away), with a first-load tutorial, a 🎲 surprise-me button, saved places, a smart type-in filter (`"castles in france under 12 h"`), and a **Live intel** card that asks Claude — through the same Worker (`POST /api/spot`, web search, cached 12 h) — what's happening at a destination right now.
 
 **API setup in one script.** Run `./setup-api.sh` from the repo root: it prompts for your Anthropic key (and an optional access code for friends), stores them as Cloudflare secrets, and deploys the Worker. Nothing secret ever touches the website.
 
@@ -47,6 +47,36 @@ Nothing but you ever sees a key. The Worker enforces an origin allowlist and a s
 One sunset-glass look, implemented from the Claude Design canvas (`Spain Vacation.dc.html`) on the "Classical" design-system tokens. Three tabs — Stays, Flights, Saved — and nothing else. (The old Rota day-planner endpoint still lives in the Worker for anyone who wants it back.)
 
 ---
+
+## Wave Watch (`surf/`)
+
+Live bodyboarding conditions for the Rota area: **[surf/](surf/)**.
+
+The question it answers is "is it worth going, and where" — scored hour by hour for the next seven days across seventeen beaches from Rota down to Tarifa.
+
+- **A score out of 100 per beach per hour**, tuned for a bodyboard rather than a surfboard. A sponge wants a steeper, punchier, shallower wave, is happy at half the size a longboard needs, and actively likes the low-tide shorebreak a surfer would call a closeout — so size, period, wind angle, swell direction and tide state are weighted for that, and shorebreak spots get a bonus as the water drops off the bank.
+- **The grid.** Seven days down, every hour across, coloured by score. The week reads as a shape before you read a number, and tapping a cell opens that exact hour at that exact beach. Night hours are hatched, not blank.
+- **Where to park**, for every spot: the named car park with its own coordinates, what it costs, how long the walk is, and the honest note — which dirt lot turns to mud after winter rain, which one the attendants work in August, where the corrales de pesca lie under the water at Candor.
+- **Can you bodyboard here.** Spanish beach ordinances ban rigid boards inside the buoyed swimming zone from roughly 15 June to 15 September during lifeguard hours, and bodyboards count. Every spot carries that rule in plain words, plus the part that matters: nine months of the year there is no restriction at all, and that is when the swell shows up anyway.
+- **What to wear**, chosen from the live sea-surface temperature rather than the calendar, half a step colder than a surf chart because you are lying in the water rather than standing above it. The kit list is conditional too — fin tethers appear when there is current, an impact vest over 2 m, booties when it is reef or when the water drops under 17 °C.
+- **A live illustration of the sea**, drawn from the current numbers: swell height sets the amplitude, period sets the spacing and speed, the depth profile makes the waves stand up and break near the beach, the wind arrows blow the right way, and a 1.75 m figure and a one-metre rule give you the scale.
+- **The week as a chart** — wave height with a shaded band showing how far apart the three agency models are, tide underneath, wind as a dotted line — and **the swell moving**, as Windy's live ECMWF wave map over the Gulf of Cádiz.
+- **Beach cameras** for Las Redes, Cádiz, Conil, La Barrosa and Zahara. They all block iframe embedding, so the cards open them rather than pretending to inline them, and the page says so.
+
+**Where the numbers come from.** Four independent numerical models from four agencies, all keyless and CORS-open, batched into three requests for all seventeen spots at once:
+
+```
+marine-api.open-meteo.com   waves · swell · sea temperature · tide height
+                            best-match, plus ECMWF WAM, Météo-France MFWAM
+                            and NOAA GFS-Wave for the spread
+api.open-meteo.com          wind · air · UV · rain · sunrise/sunset
+                            best-match, plus ECMWF IFS, NOAA GFS and DWD ICON
+```
+
+The headline number is the best-match blend; the other models are what the **confidence badge** measures. When the three disagree by more than a third, you are told the forecast is low confidence instead of being handed false precision — and confidence decays on its own past five days out whatever the models say. Every source is fetched independently, so losing one costs you the badge rather than the forecast, and the last good load is cached in `localStorage` so the page still opens something useful with no signal.
+
+> The local rule worth knowing before you read anything else: **Levante** — the east wind — blows offshore on every west-facing beach from Rota to Conil and is the best thing that can happen to this coast. **Poniente**, the westerly, ruins all of them. When Poniente is blowing, Los Caños de Meca faces south behind Cape Trafalgar and is offshore in exactly that wind. The site tells you this on the day it matters.
+
 
 ## Hike Finder (`hikes/`)
 

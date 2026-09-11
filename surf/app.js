@@ -1,0 +1,1411 @@
+/* Rota Wave Watch — live bodyboarding conditions for the Gulf of Cádiz.
+   No build step, no framework, no API keys. Three batched requests cover
+   every spot; everything else is arithmetic.
+
+   Sources, all keyless and CORS-open:
+     marine-api.open-meteo.com  waves, swell, sea temperature, tide height
+                                (best-match, plus ECMWF WAM / Météo-France
+                                 MFWAM / NOAA GFS-Wave for model spread)
+     api.open-meteo.com         wind, air, UV, rain, sunrise/sunset
+                                (best-match, plus ECMWF IFS / GFS / ICON)
+*/
+(function () {
+"use strict";
+
+var SPOTS = window.__SURF_SPOTS__ || [];
+var CAMS  = window.__SURF_CAMS__ || [];
+var SUITS = window.__SURF_WETSUIT__ || [];
+var KIT   = window.__SURF_KIT__ || [];
+var RULES = window.__SURF_RULES__ || {};
+var LORE  = window.__SURF_LORE__ || [];
+
+var DAYS = 7;
+var TZ = "Europe/Madrid";
+var CACHE_KEY = "rotasurf.v1";
+var CACHE_MAX_AGE = 60 * 60 * 1000;      /* an hour — the models update every 3–6 h */
+
+/* ───────────────────────────── tiny helpers ───────────────────────────── */
+var $  = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+var el = function (t, c, h) { var n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
+var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]; }); };
+var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
+var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+var r1 = function (v) { return Math.round(v * 10) / 10; };
+var avg = function (a) { var s = 0, n = 0, i; for (i = 0; i < a.length; i++) if (a[i] != null) { s += a[i]; n++; } return n ? s / n : null; };
+
+/* Smallest angle between two bearings, 0–180. */
+function angDiff(a, b) { return Math.abs(((a - b) % 360 + 540) % 360 - 180); }
+/* Is bearing b inside the arc from lo to bearing hi, going clockwise? */
+function inArc(b, lo, hi) {
+  var span = ((hi - lo) % 360 + 360) % 360;
+  var off  = ((b  - lo) % 360 + 360) % 360;
+  return off <= span;
+}
+function arcDistance(b, lo, hi) {
+  if (inArc(b, lo, hi)) return 0;
+  return Math.min(angDiff(b, lo), angDiff(b, hi));
+}
+var COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+function compass(deg) { return COMPASS[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16]; }
+
+/* Spanish wall clock, whatever time zone the phone is in. */
+var MDATE = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+var MTIME = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour12: false, hour: "2-digit", minute: "2-digit" });
+function madridNowKey() { return MDATE.format(new Date()) + "T" + MTIME.format(new Date()).slice(0, 2) + ":00"; }
+function madridToday() { return MDATE.format(new Date()); }
+
+/* The API hands back local wall-clock strings with no offset. Parse them as
+   plain labels rather than as instants — no Date maths, no DST surprises. */
+function parseKey(s) {
+  return { date: s.slice(0, 10), hour: +s.slice(11, 13), key: s.slice(0, 13) + ":00" };
+}
+var WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+var MO = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function dayLabel(iso) {
+  var p = iso.split("-"), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+  var today = madridToday();
+  if (iso === today) return "Today";
+  var t = today.split("-"), tm = Date.UTC(+t[0], +t[1] - 1, +t[2]);
+  if (d - tm === 86400000) return "Tomorrow";
+  return WD[d.getUTCDay()] + " " + +p[2] + " " + MO[+p[1] - 1];
+}
+function dayShort(iso) {
+  var p = iso.split("-"), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+  return { wd: WD[d.getUTCDay()], dm: +p[2] + "/" + (+p[1]) };
+}
+function hhmm(h) { return pad(h) + ":00"; }
+
+/* ───────────────────────────── data fetching ───────────────────────────── */
+
+var MARINE_VARS = ["wave_height", "wave_direction", "wave_period", "wind_wave_height",
+  "wind_wave_period", "swell_wave_height", "swell_wave_direction", "swell_wave_period",
+  "sea_surface_temperature", "sea_level_height_msl"].join(",");
+var ATMO_VARS = ["wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "temperature_2m",
+  "precipitation", "precipitation_probability", "uv_index", "weather_code", "cloud_cover"].join(",");
+var WAVE_MODELS = "ecmwf_wam025,meteofrance_wave,ncep_gfswave025";
+var ATMO_MODELS = "ecmwf_ifs025,gfs_seamless,icon_seamless";
+
+function joinCoords(key) { return SPOTS.map(function (s) { return s[key]; }).join(","); }
+
+function withTimeout(url, ms) {
+  var ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  var t = setTimeout(function () { if (ctl) ctl.abort(); }, ms || 20000);
+  return fetch(url, ctl ? { signal: ctl.signal } : undefined)
+    .then(function (r) {
+      clearTimeout(t);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }, function (e) { clearTimeout(t); throw e; });
+}
+/* One retry with a short backoff. Open-Meteo is reliable but phones are not. */
+function fetchRetry(url, tries) {
+  return withTimeout(url).catch(function (e) {
+    if ((tries || 0) >= 1) throw e;
+    return new Promise(function (res) { setTimeout(res, 900); })
+      .then(function () { return fetchRetry(url, (tries || 0) + 1); });
+  });
+}
+var asList = function (d) { return Array.isArray(d) ? d : [d]; };
+
+function loadAll() {
+  var lat = joinCoords("mlat"), lon = joinCoords("mlon");
+  var alat = joinCoords("lat"), alon = joinCoords("lon");
+  var base = "&timezone=" + encodeURIComponent(TZ) + "&forecast_days=" + DAYS;
+
+  var reqs = [
+    { id: "marine", label: "Waves, swell, sea temp, tide",
+      url: "https://marine-api.open-meteo.com/v1/marine?latitude=" + lat + "&longitude=" + lon +
+           "&hourly=" + MARINE_VARS + base },
+    { id: "atmo", label: "Wind, air, UV, sun",
+      url: "https://api.open-meteo.com/v1/forecast?latitude=" + alat + "&longitude=" + alon +
+           "&hourly=" + ATMO_VARS + "&daily=sunrise,sunset,uv_index_max" + base + "&wind_speed_unit=kn" },
+    { id: "wavespread", label: "ECMWF · Météo-France · NOAA wave models",
+      url: "https://marine-api.open-meteo.com/v1/marine?latitude=" + lat + "&longitude=" + lon +
+           "&hourly=wave_height,swell_wave_period&models=" + WAVE_MODELS + base },
+    { id: "windspread", label: "ECMWF · NOAA · DWD wind models",
+      url: "https://api.open-meteo.com/v1/forecast?latitude=" + alat + "&longitude=" + alon +
+           "&hourly=wind_speed_10m&models=" + ATMO_MODELS + base + "&wind_speed_unit=kn" }
+  ];
+
+  /* Every source is fetched independently and failures are isolated: losing
+     the model-spread call costs you the confidence badge, not the forecast. */
+  return Promise.all(reqs.map(function (r) {
+    return fetchRetry(r.url).then(
+      function (d) { return { id: r.id, label: r.label, ok: true, data: asList(d) }; },
+      function (e) { return { id: r.id, label: r.label, ok: false, err: String(e.message || e) }; }
+    );
+  })).then(function (rs) {
+    var out = { at: Date.now(), sources: {} };
+    rs.forEach(function (r) { out.sources[r.id] = r; });
+    if (!out.sources.marine.ok || !out.sources.atmo.ok) {
+      var cached = readCache();
+      if (cached) { cached.stale = true; return cached; }
+      throw new Error(out.sources.marine.err || out.sources.atmo.err);
+    }
+    writeCache(out);
+    return out;
+  });
+}
+
+function readCache() {
+  try {
+    var raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    var d = JSON.parse(raw);
+    if (!d || !d.at || !d.sources) return null;
+    return d;
+  } catch (e) { return null; }
+}
+function writeCache(d) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(d)); } catch (e) { /* quota or private mode */ }
+}
+
+/* ──────────────────────── assembling the hour table ──────────────────────── */
+
+/* Pull one spot's series out of the multi-location responses and index it by
+   wall-clock hour so the four sources line up even if one returns a shifted
+   window. */
+function seriesFor(res, i, pick) {
+  if (!res || !res.ok || !res.data[i]) return null;
+  var h = res.data[i].hourly;
+  if (!h || !h.time) return null;
+  var map = {};
+  for (var t = 0; t < h.time.length; t++) {
+    var row = {};
+    for (var k in h) if (k !== "time") row[k] = h[k][t];
+    map[parseKey(h.time[t]).key] = row;
+  }
+  return { map: map, times: h.time.map(function (s) { return parseKey(s).key; }), daily: res.data[i].daily || null };
+}
+
+/* Tide arrives as height above mean sea level. What matters for surf is where
+   you are between this tide's own low and high, and which way it is going —
+   so normalise against a rolling 13-hour window (a bit over one full cycle). */
+function tideState(times, map, idx) {
+  var lo = Infinity, hi = -Infinity, i;
+  for (i = Math.max(0, idx - 6); i <= Math.min(times.length - 1, idx + 6); i++) {
+    var v = map[times[i]] && map[times[i]].sea_level_height_msl;
+    if (v == null) continue;
+    if (v < lo) lo = v; if (v > hi) hi = v;
+  }
+  var cur = map[times[idx]] ? map[times[idx]].sea_level_height_msl : null;
+  if (cur == null || !isFinite(lo) || hi - lo < 0.05) return { t: 0.5, rising: true, m: cur, range: hi - lo };
+  var prev = idx > 0 && map[times[idx - 1]] ? map[times[idx - 1]].sea_level_height_msl : cur;
+  return { t: clamp((cur - lo) / (hi - lo), 0, 1), rising: cur >= prev, m: cur, range: hi - lo };
+}
+
+/* Sunrise/sunset for the day, as minutes past midnight local. */
+function sunFor(daily, date) {
+  if (!daily || !daily.time) return { up: 7 * 60 + 30, down: 21 * 60 };
+  var i = daily.time.indexOf(date);
+  if (i < 0) return { up: 7 * 60 + 30, down: 21 * 60 };
+  var mins = function (s) { return s ? (+s.slice(11, 13)) * 60 + (+s.slice(14, 16)) : null; };
+  return { up: mins(daily.sunrise[i]) || 450, down: mins(daily.sunset[i]) || 1260 };
+}
+
+/* ─────────────────────────── the scoring model ───────────────────────────
+   Tuned for a bodyboard, which is not the same as tuning for a surfboard:
+   a sponge wants a steeper, punchier, shallower wave, is happy at half the
+   size a longboard needs, and actively likes a low-tide shorebreak that a
+   surfer would call a closeout. Weights reflect that.                      */
+
+function sizeScore(hs, best) {
+  if (hs < best.min * 0.45) return clamp((hs / (best.min * 0.45)) * 22, 0, 22);
+  if (hs < best.min) return 22 + ((hs - best.min * 0.45) / (best.min * 0.55)) * 45;
+  if (hs <= best.max) {
+    var spread = Math.max(best.ideal - best.min, best.max - best.ideal, 0.25);
+    var d = Math.abs(hs - best.ideal) / spread;
+    return 100 - 28 * d * d;
+  }
+  /* Over the top of the band it closes out — falls away fast, never to zero
+     because an advanced rider can still find a corner. */
+  return clamp(72 - (hs - best.max) * 40, 12, 72);
+}
+
+function periodScore(tp, pmin) {
+  if (tp == null) return 50;
+  if (tp < pmin - 2) return 8;
+  if (tp < pmin) return 8 + ((tp - (pmin - 2)) / 2) * 34;
+  return clamp(42 + ((tp - pmin) / 5) * 58, 42, 100);
+}
+
+/* Offshore is the whole game. Under about 5 knots nothing matters — it is
+   glassy from any direction — and above that the penalty for onshore builds
+   far faster than the penalty for offshore. */
+function windScore(spd, dir, off) {
+  if (spd == null || dir == null) return 60;
+  if (spd < 4) return 92;
+  var offshoreness = Math.cos(angDiff(dir, off) * Math.PI / 180);   /* 1 offshore … -1 onshore */
+  var s = 50 + 45 * offshoreness;
+  if (offshoreness > 0.25) s -= Math.max(0, spd - 22) * 3.2;        /* too much of a good thing */
+  else s -= Math.max(0, spd - 7) * 2.4;                              /* chop arrives quickly */
+  return clamp(s, 0, 100);
+}
+
+function tideScore(spot, st) {
+  var t = st.t;
+  var s;
+  switch (spot.tide) {
+    case "low":  s = 100 - Math.abs(t - 0.22) * 118; break;
+    case "high": s = 100 - Math.abs(t - 0.80) * 118; break;
+    case "push": s = 100 - Math.abs(t - 0.55) * 95 + (st.rising ? 10 : -14); break;
+    case "all":  s = 84; break;
+    default:     s = 100 - Math.abs(t - 0.50) * 105; break;          /* mid */
+  }
+  /* A shorebreak sharpens up as the water drops off the bank — a bodyboard
+     bonus a surf forecast would not give you. */
+  if (spot.shore && t < 0.4) s += 8;
+  return clamp(s, 8, 100);
+}
+
+/* How much of the open-ocean swell actually arrives, given the headlands.
+   Longer-period swell refracts into sheltered corners better than short
+   wind chop does, which is why a distant groundswell lights up beaches that
+   a local blow-up never touches. */
+function reachFactor(spot, swellDir, tp) {
+  var off = arcDistance(swellDir, spot.win[0], spot.win[1]);
+  var dirF = off <= 0 ? 1 : clamp(1 - off / 42, 0.06, 1);
+  var refract = 1;
+  if (spot.exposure < 0.75 && tp) refract = clamp(1 + (tp - 9) * 0.055, 0.82, 1.3);
+  return { dirF: dirF, reach: clamp(spot.exposure * refract, 0, 1.05), offBy: off };
+}
+
+function scoreHour(spot, m, a, st, sun, hour) {
+  if (!m || !a) return null;
+  /* What you can actually ride is the swell, not the total sea state. Local
+     wind chop inflates significant wave height without adding a single
+     rideable wave, so it only counts for a third of its energy here. */
+  var sw = m.swell_wave_height, ww = m.wind_wave_height;
+  var hs = sw != null
+    ? Math.sqrt(sw * sw + (ww != null ? 0.35 * ww * ww : 0))
+    : m.wave_height;
+  if (hs == null) return null;
+  var swellDir = m.swell_wave_direction != null ? m.swell_wave_direction : m.wave_direction;
+  var tp = m.swell_wave_period != null ? m.swell_wave_period : m.wave_period;
+
+  var rf = reachFactor(spot, swellDir, tp);
+  var localHs = hs * rf.reach * Math.pow(rf.dirF, 1.15);
+
+  var sz = sizeScore(localHs, spot.best);
+  var pd = periodScore(tp, spot.pmin);
+  var wd = windScore(a.wind_speed_10m, a.wind_direction_10m, spot.off);
+  var td = tideScore(spot, st);
+  var dr = rf.dirF * 100;
+
+  var score = 0.30 * sz + 0.24 * wd + 0.16 * pd + 0.15 * td + 0.15 * dr;
+
+  /* Penalties are multiplicative rather than hard ceilings. A ceiling makes
+     every hour of a gusty day read exactly 42, which throws away the shape
+     of the day — and the shape is the thing you are looking for. */
+  var damp = 1;
+  if (tp != null && tp < 6) damp *= clamp(0.40 + (tp - 4) / 6.5, 0.40, 1);      /* local chop */
+  if (a.wind_gusts_10m != null && a.wind_gusts_10m > 28) {
+    damp *= clamp(1 - (a.wind_gusts_10m - 28) * 0.028, 0.42, 1);                /* squally */
+  }
+  if (a.precipitation != null && a.precipitation > 2) damp *= 0.93;
+  score *= damp;
+
+  var flat = localHs < 0.30;
+  if (flat) score = Math.min(score, 7 + localHs * 36);
+
+  var mins = hour * 60;
+  var dark = mins < sun.up - 25 || mins > sun.down + 20;
+  var twilight = !dark && (mins < sun.up + 20 || mins > sun.down - 30);
+
+  /* Wave energy per metre of crest, in relative terms — this is what people
+     mean by "punchy". Height counts twice over, period once. */
+  var punch = localHs * localHs * (tp || 8);
+
+  return {
+    score: clamp(Math.round(score), 0, 100),
+    localHs: localHs, offshoreHs: hs, tp: tp, swellDir: swellDir,
+    wind: a.wind_speed_10m, windDir: a.wind_direction_10m, gust: a.wind_gusts_10m,
+    airT: a.temperature_2m, sst: m.sea_surface_temperature, uv: a.uv_index,
+    rain: a.precipitation, rainP: a.precipitation_probability, cloud: a.cloud_cover,
+    tide: st, dark: dark, twilight: twilight, flat: flat, punch: punch,
+    parts: { size: sz, wind: wd, period: pd, tide: td, dir: dr },
+    offBy: rf.offBy
+  };
+}
+
+/* ─────────────────────── build every spot's week ─────────────────────── */
+
+function buildModel(raw) {
+  var marine = raw.sources.marine, atmo = raw.sources.atmo;
+  var wspread = raw.sources.wavespread, windspread = raw.sources.windspread;
+  var out = { spots: [], hours: [], days: [], at: raw.at, stale: !!raw.stale, sources: raw.sources };
+
+  SPOTS.forEach(function (spot, i) {
+    var M = seriesFor(marine, i, null), A = seriesFor(atmo, i, null);
+    if (!M || !A) return;
+    var WS = seriesFor(wspread, i, null), NS = seriesFor(windspread, i, null);
+    var rows = [];
+    for (var t = 0; t < M.times.length; t++) {
+      var key = M.times[t];
+      var m = M.map[key], a = A.map[key];
+      if (!m || !a) continue;
+      var pk = parseKey(key);
+      var sun = sunFor(A.daily, pk.date);
+      var st = tideState(M.times, M.map, t);
+      var sc = scoreHour(spot, m, a, st, sun, pk.hour);
+      if (!sc) continue;
+      sc.key = key; sc.date = pk.date; sc.hour = pk.hour; sc.sun = sun;
+
+      /* Model agreement: how far apart the three agencies are on wave height
+         at this hour, as a fraction of their mean. */
+      if (WS && WS.map[key]) {
+        var w = WS.map[key];
+        var hs3 = [w.wave_height_ecmwf_wam025, w.wave_height_meteofrance_wave, w.wave_height_ncep_gfswave025]
+          .filter(function (v) { return v != null; });
+        if (hs3.length >= 2) {
+          var mn = Math.min.apply(null, hs3), mx = Math.max.apply(null, hs3), me = avg(hs3);
+          sc.band = { lo: mn, hi: mx, mid: me, n: hs3.length };
+          sc.spread = me > 0.15 ? (mx - mn) / me : 0;
+        }
+      }
+      if (NS && NS.map[key]) {
+        var n = NS.map[key];
+        var w3 = [n.wind_speed_10m_ecmwf_ifs025, n.wind_speed_10m_gfs_seamless, n.wind_speed_10m_icon_seamless]
+          .filter(function (v) { return v != null; });
+        if (w3.length >= 2) sc.windSpread = (Math.max.apply(null, w3) - Math.min.apply(null, w3));
+      }
+      rows.push(sc);
+    }
+    if (rows.length) out.spots.push({ spot: spot, rows: rows, byKey: index(rows) });
+  });
+
+  if (out.spots.length) {
+    out.hours = out.spots[0].rows.map(function (r) { return r.key; });
+    var seen = {};
+    out.spots[0].rows.forEach(function (r) { if (!seen[r.date]) { seen[r.date] = 1; out.days.push(r.date); } });
+  }
+  return out;
+}
+function index(rows) { var m = {}; rows.forEach(function (r) { m[r.key] = r; }); return m; }
+
+/* Confidence from model spread plus how far out we are looking. */
+function confidenceOf(sc, key) {
+  var lead = out_leadHours(key);
+  var base = sc && sc.spread != null ? sc.spread : null;
+  var lvl;
+  if (base == null) lvl = lead < 48 ? 2 : 1;
+  else if (base < 0.18) lvl = 3;
+  else if (base < 0.38) lvl = 2;
+  else lvl = 1;
+  if (lead > 120 && lvl === 3) lvl = 2;
+  if (lead > 144 && lvl > 1) lvl = 1;
+  var why = base == null ? "one model only"
+      : Math.round(base * 100) + "% spread across three models";
+  return { level: lvl, label: ["", "Low", "Fair", "High"][lvl], why: why, lead: lead };
+}
+function out_leadHours(key) {
+  var now = madridNowKey();
+  var a = now.slice(0, 13), b = key.slice(0, 13);
+  var da = Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10), +a.slice(11, 13));
+  var db = Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10), +b.slice(11, 13));
+  return Math.round((db - da) / 3600000);
+}
+
+/* ──────────────────────── verdicts, kit, sessions ──────────────────────── */
+
+var BANDS = [
+  { min: 78, word: "Go now",        tone: "epic",  d: "This is as good as this coast gets. Drop what you are doing." },
+  { min: 62, word: "Worth the drive", tone: "good", d: "A proper session. Clean enough and big enough to be fun." },
+  { min: 46, word: "Rideable",      tone: "ok",    d: "You will catch waves. Not a day you will remember, but a good one to be in the water." },
+  { min: 30, word: "Marginal",      tone: "meh",   d: "Small, or messy, or both. Fine if you just want a swim with a board." },
+  { min: 14, word: "Poor",          tone: "poor",  d: "Not really surfable. Look at another day on the grid." },
+  { min: -1, word: "Flat",          tone: "flat",  d: "Nothing there. The Gulf of Cádiz does this a lot in summer." }
+];
+function band(score) { for (var i = 0; i < BANDS.length; i++) if (score >= BANDS[i].min) return BANDS[i]; return BANDS[BANDS.length - 1]; }
+
+function suitFor(sst) {
+  if (sst == null) return SUITS[3];
+  for (var i = 0; i < SUITS.length; i++) if (sst >= SUITS[i].min) return SUITS[i];
+  return SUITS[SUITS.length - 1];
+}
+function kitFor(sc, spot) {
+  var month = +madridToday().slice(5, 7);
+  var ctx = {
+    hs: sc.localHs, sst: sc.sst, airT: sc.airT, uv: sc.uv || 0, wind: sc.wind || 0,
+    reef: /reef|rock/i.test(spot.bottom || "") || /reef/i.test(spot.type || ""),
+    rip: sc.localHs >= 1.3 || /rip/i.test((spot.hazards || []).join(" ")),
+    summer: month >= 6 && month <= 9
+  };
+  return KIT.filter(function (k) { return k.always || (k.test && k.test(ctx)); });
+}
+
+/* Contiguous daylight runs above a threshold become a "window" you can plan
+   around — which is the thing you actually want from a forecast. */
+function windowsFor(entry, minScore) {
+  var runs = [], cur = null;
+  entry.rows.forEach(function (r) {
+    var good = !r.dark && r.score >= minScore;
+    if (good) {
+      if (cur && cur.date === r.date && r.hour === cur.endH + 1) { cur.endH = r.hour; cur.rows.push(r); }
+      else { if (cur) runs.push(cur); cur = { date: r.date, startH: r.hour, endH: r.hour, rows: [r] }; }
+    } else if (cur) { runs.push(cur); cur = null; }
+  });
+  if (cur) runs.push(cur);
+  return runs.map(function (w) {
+    var best = w.rows.reduce(function (a, b) { return b.score > a.score ? b : a; });
+    return {
+      date: w.date, startH: w.startH, endH: w.endH + 1, hours: w.endH - w.startH + 1,
+      peak: best, avg: Math.round(avg(w.rows.map(function (r) { return r.score; })))
+    };
+  });
+}
+
+/* ═══════════════════════════════ state ═══════════════════════════════ */
+
+var S = {
+  model: null,
+  spotId: null,        /* null = "pick the best one for me" */
+  maxDrive: 999,
+  view: "now",
+  sel: null,           /* {spotId, key} chosen from the grid or chart */
+  err: null
+};
+
+function spotsInRange() {
+  return S.model.spots.filter(function (e) { return e.spot.drive <= S.maxDrive; });
+}
+function rowAt(entry, key) { return entry.byKey[key]; }
+function nowKey() {
+  var k = madridNowKey();
+  if (S.model && S.model.hours.indexOf(k) < 0) return S.model.hours[0];
+  return k;
+}
+/* Best spot at a given hour, within the drive filter. */
+function bestAt(key) {
+  var best = null;
+  spotsInRange().forEach(function (e) {
+    var r = rowAt(e, key);
+    if (!r) return;
+    if (!best || r.score > best.row.score) best = { entry: e, row: r };
+  });
+  return best;
+}
+function currentPick() {
+  var key = (S.sel && S.sel.key) || nowKey();
+  if (S.spotId) {
+    var e = S.model.spots.filter(function (x) { return x.spot.id === S.spotId; })[0];
+    if (e && rowAt(e, key)) return { entry: e, row: rowAt(e, key), key: key };
+  }
+  var b = bestAt(key);
+  return b ? { entry: b.entry, row: b.row, key: key } : null;
+}
+
+/* ═════════════════════ the animated wave illustration ═════════════════════
+   A side-on slice of the sea drawn from the live numbers: the swell height
+   sets the amplitude, the period sets how far apart the crests are and how
+   fast they roll in, the depth profile makes them stand up and break near
+   the beach, and the wind arrows blow the right way. The figure is 1.75 m,
+   so you can read the wave size against a person. Heights are to scale
+   against that figure; the horizontal axis is compressed, as on any wave
+   diagram, or a 9-second swell would be 126 m from crest to crest.        */
+
+var waveAnim = { raf: 0, t0: 0, running: false };
+
+function drawWave(cv, sc, spot) {
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H) return;
+  if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+  var g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+
+  var cs = getComputedStyle(document.documentElement);
+  var C = function (n, f) { var v = cs.getPropertyValue(n).trim(); return v || f; };
+  var sea = C("--sea", "#12658a"), seaD = C("--sea-deep", "#093f5c"),
+      foam = C("--foam", "#ffffff"), sky1 = C("--sky-1", "#bfe3f2"), sky2 = C("--sky-2", "#eaf6fb"),
+      sand = C("--sand", "#e3cfa8"), inkc = C("--ink", "#0b1f2a");
+
+  var hs = Math.max(sc.localHs || 0, 0.05);
+  var tp = clamp(sc.tp || 8, 4, 20);
+  var t = (performance.now() - waveAnim.t0) / 1000;
+
+  /* geometry */
+  var horizon = H * 0.30;
+  var sealevel = horizon + (H - horizon) * 0.30;
+  var beachX = W * 0.80;                              /* waterline */
+  var D0 = Math.max(2.4, hs * 3.2);                    /* offshore depth, metres */
+  var pxM = clamp((H - horizon) * 0.42 / Math.max(1.1, hs * 2.1), 8, 70);
+  var waves = clamp(1.1 + 26 / tp, 2, 4.6);
+  var Lpx = beachX / waves;
+  var speed = Lpx / (tp * 0.55);                       /* slowed for legibility */
+
+  function depthAt(x) {
+    if (x >= beachX) return 0;
+    var f = x / beachX;
+    return D0 * (f < 0.42 ? 1 : Math.pow(1 - (f - 0.42) / 0.58, 1.35));
+  }
+  function amp(x) {
+    var d = depthAt(x);
+    if (d <= 0.05) return 0;
+    var ks = clamp(Math.pow(d / D0, -0.23), 1, 2.5);
+    var a = (hs / 2) * ks;
+    var lim = 0.42 * d;                                 /* depth-limited breaking */
+    return Math.min(a, lim);
+  }
+  function surfaceY(x, phase) {
+    var a = amp(x);
+    var k = 2 * Math.PI / Lpx;
+    /* Sharpen the crests as the wave feels bottom — real waves are not sines. */
+    var d = depthAt(x), sharp = clamp(1 - d / D0, 0, 1);
+    var th = k * x - t * speed * k + phase;
+    var s = Math.sin(th);
+    var v = s * (1 - 0.42 * sharp) + Math.pow(Math.abs(s), 1 + 1.9 * sharp) * Math.sign(s) * (0.42 * sharp);
+    return sealevel - v * a * pxM;
+  }
+  function isBreaking(x) {
+    var d = depthAt(x);
+    return d > 0.02 && (2 * amp(x)) >= 0.76 * d;
+  }
+
+  /* sky */
+  var sg = g.createLinearGradient(0, 0, 0, horizon + 12);
+  sg.addColorStop(0, sky1); sg.addColorStop(1, sky2);
+  g.fillStyle = sg; g.fillRect(0, 0, W, horizon + 12);
+
+  /* sand wedge behind the water */
+  g.beginPath();
+  g.moveTo(beachX - Lpx * 0.5, H); g.lineTo(beachX - Lpx * 0.15, sealevel + 2);
+  g.lineTo(W, sealevel - (H - horizon) * 0.10); g.lineTo(W, H); g.closePath();
+  g.fillStyle = sand; g.fill();
+
+  /* distant swell lines stacked up to the horizon, for depth */
+  g.strokeStyle = seaD; g.lineWidth = 1;
+  for (var q = 0; q < 4; q++) {
+    var qy = horizon + (sealevel - horizon) * (0.18 + q * 0.19);
+    var qdrift = ((t * speed * 0.35 + q * 37) % 74) - 37;
+    g.globalAlpha = 0.10 + q * 0.055;
+    g.beginPath();
+    for (var qx = -40; qx <= beachX; qx += 4) {
+      var qw = Math.sin((qx + qdrift) / (26 + q * 9)) * (1.1 + q * 0.9);
+      if (qx <= -40) g.moveTo(qx, qy + qw); else g.lineTo(qx, qy + qw);
+    }
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+
+  /* the water body */
+  g.beginPath();
+  g.moveTo(0, H);
+  for (var x = 0; x <= beachX; x += 2) g.lineTo(x, surfaceY(x, 0));
+  g.lineTo(beachX, H); g.closePath();
+  var wg = g.createLinearGradient(0, horizon, 0, H);
+  wg.addColorStop(0, sea); wg.addColorStop(1, seaD);
+  g.fillStyle = wg; g.fill();
+
+  /* crest highlight + whitewater where it is depth-limited */
+  g.beginPath();
+  for (var x2 = 0; x2 <= beachX; x2 += 2) {
+    var y2 = surfaceY(x2, 0);
+    if (x2 === 0) g.moveTo(x2, y2); else g.lineTo(x2, y2);
+  }
+  g.strokeStyle = foam; g.globalAlpha = 0.55; g.lineWidth = 1.6; g.stroke(); g.globalAlpha = 1;
+
+  for (var x3 = 0; x3 <= beachX; x3 += 4) {
+    if (!isBreaking(x3)) continue;
+    var y3 = surfaceY(x3, 0);
+    var slope = surfaceY(x3 + 4, 0) - y3;
+    if (slope > -0.15) continue;                       /* only the pitching face */
+    g.globalAlpha = 0.85;
+    g.fillStyle = foam;
+    for (var f = 0; f < 3; f++) {
+      var rr = 1.6 + Math.random() * 3.2;
+      g.beginPath();
+      g.arc(x3 + (Math.random() - 0.5) * 7, y3 + Math.random() * 9, rr, 0, 6.283);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+  }
+
+  /* soup running up the sand */
+  g.globalAlpha = 0.75; g.fillStyle = foam;
+  var runup = Math.abs(Math.sin(t * 0.55)) * Lpx * 0.30;
+  g.beginPath();
+  g.ellipse(beachX + runup * 0.6, sealevel + 3, Lpx * 0.30 + runup, 4.5, 0, 0, 6.283);
+  g.fill(); g.globalAlpha = 1;
+
+  /* ── the 1.75 m rider, standing at the waterline, for scale ── */
+  var ph = 1.75 * pxM;
+  var px = beachX + 16, py = sealevel + 2;
+  if (px + 10 < W) drawFigure(g, px, py, ph, inkc);
+
+  /* ── wind ── */
+  if (sc.wind != null && sc.windDir != null) {
+    var offness = Math.cos(angDiff(sc.windDir, spot.off) * Math.PI / 180);
+    /* The beach is on the right, so an offshore wind travels right-to-left. */
+    var dir = offness > 0 ? -1 : 1;
+    var n = clamp(Math.round((sc.wind || 0) / 4), 1, 5);
+    g.strokeStyle = inkc; g.lineWidth = 1.4; g.lineCap = "round";
+    for (var i2 = 0; i2 < n; i2++) {
+      var ay = 13 + i2 * 8.5, len = 16 + i2 * 6;
+      var span = W + 140;
+      var drift = ((t * (22 + (sc.wind || 0) * 1.6) + i2 * 53) % span) - 70;
+      var tipX = dir < 0 ? W - drift : drift;          /* the arrow head */
+      var tailX = tipX - dir * len;
+      g.globalAlpha = 0.30;
+      g.beginPath(); g.moveTo(tailX, ay); g.lineTo(tipX, ay); g.stroke();
+      g.beginPath();
+      g.moveTo(tipX, ay); g.lineTo(tipX - dir * 5, ay - 3);
+      g.moveTo(tipX, ay); g.lineTo(tipX - dir * 5, ay + 3);
+      g.stroke();
+    }
+    g.globalAlpha = 0.5;
+    g.font = "500 9.5px ui-monospace, 'IBM Plex Mono', monospace";
+    g.fillStyle = inkc;
+    g.fillText(Math.round(sc.wind) + " kn " + compass(sc.windDir) +
+      (offness > 0.28 ? " offshore" : offness < -0.28 ? " onshore" : " cross"), 10, 11);
+    g.globalAlpha = 1;
+  }
+
+  /* ── labels ── */
+  g.font = "600 11px ui-monospace, 'IBM Plex Mono', monospace";
+  g.fillStyle = inkc; g.globalAlpha = 0.72;
+  g.fillText(r1(hs) + " m face · " + Math.round(tp) + " s between crests", 10, horizon - 9);
+  g.globalAlpha = 1;
+
+  /* a one-metre rule against the left edge, so the figure is not the only
+     thing giving the picture its sense of size */
+  var rx = 13, rb = sealevel + 26, rt = rb - pxM;
+  g.strokeStyle = inkc; g.globalAlpha = 0.38; g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(rx - 4, rt); g.lineTo(rx + 4, rt);
+  g.moveTo(rx - 4, rb); g.lineTo(rx + 4, rb);
+  g.moveTo(rx, rt); g.lineTo(rx, rb);
+  g.stroke();
+  g.globalAlpha = 0.62;
+  g.font = "500 9.5px ui-monospace, 'IBM Plex Mono', monospace";
+  g.fillText("1 m", rx + 7, (rt + rb) / 2 + 3);
+  g.globalAlpha = 0.45;
+  g.fillText("figure 1.75 m", 10, H - 8);
+  g.globalAlpha = 1;
+}
+
+function drawFigure(g, x, baseY, h, color) {
+  var u = h / 8;
+  g.save(); g.fillStyle = color; g.globalAlpha = 0.82;
+  g.beginPath(); g.arc(x, baseY - h + u * 0.9, u * 0.85, 0, 6.283); g.fill();      /* head */
+  g.lineWidth = Math.max(1.4, u * 0.75); g.strokeStyle = color; g.lineCap = "round";
+  g.beginPath();
+  g.moveTo(x, baseY - h + u * 1.8); g.lineTo(x, baseY - h * 0.45);                 /* torso */
+  g.moveTo(x, baseY - h * 0.45); g.lineTo(x - u * 0.7, baseY);                      /* legs */
+  g.moveTo(x, baseY - h * 0.45); g.lineTo(x + u * 0.7, baseY);
+  g.moveTo(x, baseY - h * 0.82); g.lineTo(x - u * 1.25, baseY - h * 0.5);           /* arm */
+  g.stroke();
+  /* the board under the near arm */
+  g.globalAlpha = 0.62;
+  g.beginPath();
+  g.ellipse(x - u * 1.5, baseY - h * 0.44, u * 0.42, u * 1.5, -0.22, 0, 6.283);
+  g.fill();
+  g.restore();
+}
+
+function startWaveLoop() {
+  var cv = $("#waveCv");
+  if (!cv) return;
+  waveAnim.t0 = waveAnim.t0 || performance.now();
+  cancelAnimationFrame(waveAnim.raf);
+  var tick = function () {
+    if (document.hidden || S.view !== "now" || !document.body.contains(cv)) {
+      waveAnim.raf = requestAnimationFrame(tick); return;
+    }
+    var p = currentPick();
+    if (p) drawWave(cv, p.row, p.entry.spot);
+    waveAnim.raf = requestAnimationFrame(tick);
+  };
+  waveAnim.raf = requestAnimationFrame(tick);
+}
+
+/* ════════════════════════ swell / wind compass ════════════════════════ */
+function compassSVG(sc, spot) {
+  var R = 54, C0 = 60;
+  var pol = function (deg, r) {
+    var a = (deg - 90) * Math.PI / 180;
+    return [C0 + Math.cos(a) * r, C0 + Math.sin(a) * r];
+  };
+  /* the arc of swell directions that actually reach this beach */
+  var a0 = pol(spot.win[0], R - 4), a1 = pol(spot.win[1], R - 4);
+  var span = ((spot.win[1] - spot.win[0]) % 360 + 360) % 360;
+  var wedge = "M " + C0 + " " + C0 + " L " + r1(a0[0]) + " " + r1(a0[1]) +
+    " A " + (R - 4) + " " + (R - 4) + " 0 " + (span > 180 ? 1 : 0) + " 1 " + r1(a1[0]) + " " + r1(a1[1]) + " Z";
+
+  function arrow(deg, len, cls, head) {
+    var tip = pol(deg + 180, head ? 0 : len);          /* comes FROM deg → points inward */
+    var tail = pol(deg, len);
+    return '<line x1="' + r1(tail[0]) + '" y1="' + r1(tail[1]) + '" x2="' + r1(tip[0]) + '" y2="' + r1(tip[1]) +
+      '" class="' + cls + '" marker-end="url(#ah)"/>';
+  }
+  var sd = sc.swellDir == null ? null : sc.swellDir;
+  var wd = sc.windDir == null ? null : sc.windDir;
+  var face = pol(spot.face, R);
+
+  return '<svg viewBox="0 0 120 120" class="compass" role="img" aria-label="Swell and wind directions relative to the beach">' +
+    '<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">' +
+    '<path d="M0 0 L10 5 L0 10 z" fill="context-stroke"/></marker></defs>' +
+    '<path d="' + wedge + '" class="cwin"/>' +
+    '<circle cx="60" cy="60" r="' + R + '" class="cring"/>' +
+    '<line x1="60" y1="60" x2="' + r1(face[0]) + '" y2="' + r1(face[1]) + '" class="cface"/>' +
+    (sd != null ? arrow(sd, R - 8, "cswell") : "") +
+    (wd != null ? arrow(wd, R - 20, "cwind") : "") +
+    '<circle cx="60" cy="60" r="3" class="cdot"/>' +
+    '<text x="60" y="12" class="clbl">N</text><text x="112" y="64" class="clbl">E</text>' +
+    '<text x="60" y="116" class="clbl">S</text><text x="8" y="64" class="clbl">W</text>' +
+    '</svg>';
+}
+
+/* ═════════════════════════════ shared bits ═════════════════════════════ */
+
+function scoreCell(s) {
+  var a = 0.06 + 0.94 * Math.pow(clamp(s, 0, 100) / 100, 1.25);
+  return { bg: "rgba(var(--heat) / " + r1(a) + ")", ink: a > 0.52 ? "var(--on-heat)" : "var(--ink)" };
+}
+function windLabel(sc, spot) {
+  if (sc.wind == null) return "—";
+  var d = angDiff(sc.windDir, spot.off);
+  var word = sc.wind < 4 ? "glassy" : d < 50 ? "offshore" : d < 78 ? "cross-off" : d < 112 ? "cross-shore" : d < 140 ? "cross-on" : "onshore";
+  return Math.round(sc.wind) + " kn " + compass(sc.windDir) + " · " + word;
+}
+function tideLabel(st) {
+  var t = st.t;
+  var w = t < 0.2 ? "low" : t < 0.42 ? "low–mid" : t < 0.58 ? "mid" : t < 0.8 ? "mid–high" : "high";
+  return w + ", " + (st.rising ? "rising" : "falling");
+}
+function loreFor(dir) {
+  if (dir == null) return null;
+  for (var i = 0; i < LORE.length; i++) {
+    var L = LORE[i];
+    if (inArc(dir, L.dir[0], L.dir[1])) return L;
+  }
+  return null;
+}
+function confBadge(c) {
+  return '<span class="conf c' + c.level + '" title="' + esc(c.why) + '">' +
+    '<i></i><i></i><i></i> ' + c.label + ' confidence</span>';
+}
+
+/* ════════════════════════════ view: NOW ════════════════════════════ */
+
+function renderNow() {
+  var host = $("#v-now"); host.innerHTML = "";
+  var pick = currentPick();
+  if (!pick) { host.appendChild(el("p", "empty", "No forecast for this hour.")); return; }
+  var sc = pick.row, spot = pick.entry.spot, b = band(sc.score);
+  var conf = confidenceOf(sc, pick.key);
+  var isNow = pick.key === nowKey();
+
+  /* ── hero ── */
+  var hero = el("section", "card hero tone-" + b.tone);
+  hero.innerHTML =
+    '<div class="hero-top">' +
+      '<div class="hero-when">' +
+        '<span class="lbl">' + (isNow ? "right now" : dayLabel(sc.date) + " · " + hhmm(sc.hour)) + '</span>' +
+        '<h2>' + esc(spot.name) + '</h2>' +
+        '<p class="sub">' + esc(spot.town) + ' · ' + spot.drive + ' min from Rota' +
+          (S.spotId ? "" : ' · <b>best of ' + spotsInRange().length + ' spots</b>') + '</p>' +
+      '</div>' +
+      '<div class="hero-score"><b>' + sc.score + '</b><span>/100</span></div>' +
+    '</div>' +
+    '<p class="verdict"><b>' + b.word + '.</b> ' + esc(b.d) + '</p>' +
+    '<div class="wavebox"><canvas id="waveCv"></canvas></div>';
+  host.appendChild(hero);
+
+  /* ── the numbers ── */
+  var stats = el("section", "card");
+  var suit = suitFor(sc.sst);
+  stats.innerHTML =
+    '<div class="stats">' +
+      stat("Wave", r1(sc.localHs) + " m", "at the beach · " + r1(sc.offshoreHs) + " m offshore") +
+      stat("Period", (sc.tp == null ? "—" : Math.round(sc.tp) + " s"), sc.tp >= 11 ? "groundswell — real power" : sc.tp >= 8 ? "decent push" : "short, weak chop") +
+      stat("Swell from", sc.swellDir == null ? "—" : compass(sc.swellDir) + " " + Math.round(sc.swellDir) + "°", sc.offBy > 0 ? Math.round(sc.offBy) + "° outside this beach's window" : "straight into the window") +
+      stat("Wind", windLabel(sc, spot), sc.gust != null ? "gusting " + Math.round(sc.gust) + " kn" : "") +
+      stat("Water", sc.sst == null ? "—" : r1(sc.sst) + " °C", suit.suit) +
+      stat("Tide", tideLabel(sc.tide), r1(sc.tide.m) + " m · " + r1(sc.tide.range) + " m range · this beach likes " + spot.tide) +
+      stat("Air", sc.airT == null ? "—" : Math.round(sc.airT) + " °C", (sc.uv != null ? "UV " + Math.round(sc.uv) : "") + (sc.rainP ? " · " + sc.rainP + "% rain" : "")) +
+      stat("Daylight", hhmm(Math.floor(sc.sun.up / 60)) + "–" + hhmm(Math.floor(sc.sun.down / 60)), sc.dark ? "dark right now" : "") +
+    '</div>' +
+    '<div class="dialrow">' + compassSVG(sc, spot) +
+      '<div class="diallegend">' +
+        '<p><i class="k-swell"></i> swell in from ' + (sc.swellDir == null ? "—" : compass(sc.swellDir)) + '</p>' +
+        '<p><i class="k-wind"></i> wind from ' + (sc.windDir == null ? "—" : compass(sc.windDir)) + '</p>' +
+        '<p><i class="k-face"></i> beach faces ' + compass(spot.face) + '</p>' +
+        '<p><i class="k-win"></i> swell window that reaches here</p>' +
+      '</div>' +
+    '</div>';
+  host.appendChild(stats);
+
+  /* ── why that score ── */
+  var why = el("section", "card");
+  var P = sc.parts;
+  why.innerHTML = '<h3>Why ' + sc.score + '</h3>' +
+    '<div class="bars">' +
+      bar("Size", P.size, r1(sc.localHs) + " m vs a " + spot.best.min + "–" + spot.best.max + " m sweet spot") +
+      bar("Wind", P.wind, windLabel(sc, spot)) +
+      bar("Swell direction", P.dir, sc.offBy > 0 ? Math.round(sc.offBy) + "° off the window" : "inside the window") +
+      bar("Period", P.period, (sc.tp == null ? "—" : Math.round(sc.tp) + " s") + " · needs " + spot.pmin + " s+") +
+      bar("Tide", P.tide, tideLabel(sc.tide) + " · wants " + spot.tide) +
+    '</div>' +
+    '<p class="foot">' + confBadge(conf) + ' — ' + esc(conf.why) +
+      (conf.lead > 0 ? ", " + conf.lead + " h ahead" : "") + '.</p>';
+  host.appendChild(why);
+
+  /* ── what to bring ── */
+  var kit = kitFor(sc, spot);
+  var gear = el("section", "card");
+  gear.innerHTML = '<h3>What to bring</h3>' +
+    '<div class="suit"><span class="suiticon">' + suit.icon + '</span><div><b>' + esc(suit.suit) + '</b>' +
+      '<p>' + esc(suit.extra) + '</p>' +
+      '<p class="foot">Water is ' + (sc.sst == null ? "—" : r1(sc.sst) + " °C") + ' right now.</p></div></div>' +
+    '<ul class="kit">' + kit.map(function (k) {
+      return '<li><b>' + esc(k.label) + '</b><span>' + esc(k.why) + '</span></li>';
+    }).join("") + '</ul>';
+  host.appendChild(gear);
+
+  /* ── the wind story ── */
+  var L = loreFor(sc.windDir);
+  if (L) {
+    var lore = el("section", "card lore " + (L.good ? "lore-good" : "lore-bad"));
+    lore.innerHTML = '<h3>' + esc(L.t) + '</h3><p>' + esc(L.d) + '</p>';
+    host.appendChild(lore);
+  }
+
+  /* ── next best windows ── */
+  var wins = bestWindows(6);
+  var nb = el("section", "card");
+  nb.innerHTML = '<h3>Next windows worth driving to</h3>' +
+    (wins.length ? '<div class="wins">' + wins.map(function (w) {
+      var wb = band(w.peak.score);
+      return '<button class="win" data-spot="' + esc(w.spotId) + '" data-key="' + esc(w.peak.key) + '">' +
+        '<span class="win-score" style="background:' + scoreCell(w.peak.score).bg + ';color:' + scoreCell(w.peak.score).ink + '">' + w.peak.score + '</span>' +
+        '<span class="win-main"><b>' + dayLabel(w.date) + ' · ' + hhmm(w.startH) + '–' + hhmm(w.endH) + '</b>' +
+        '<span>' + esc(w.spotName) + ' · ' + r1(w.peak.localHs) + ' m · ' + windLabel(w.peak, w.spot) + '</span></span>' +
+        '<span class="win-tag">' + wb.word + '</span></button>';
+    }).join("") + '</div>'
+      : '<p class="empty">Nothing above the bar in the next ' + DAYS + ' days. That happens here in flat summer spells — the grid below shows the least-bad hours.</p>');
+  host.appendChild(nb);
+
+  $$(".win", nb).forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      S.spotId = btn.getAttribute("data-spot");
+      S.sel = { key: btn.getAttribute("data-key") };
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+
+  startWaveLoop();
+}
+
+function stat(k, v, note) {
+  return '<div class="stat"><span class="lbl">' + esc(k) + '</span><b>' + esc(v) + '</b>' +
+    (note ? '<span class="note">' + esc(note) + '</span>' : '') + '</div>';
+}
+function bar(k, v, note) {
+  return '<div class="barrow"><span class="bk">' + esc(k) + '</span>' +
+    '<span class="bt"><i style="width:' + clamp(Math.round(v), 2, 100) + '%"></i></span>' +
+    '<span class="bv">' + Math.round(v) + '</span>' +
+    '<span class="bn">' + esc(note) + '</span></div>';
+}
+
+/* Best window per day across every spot in range, strongest first. */
+function bestWindows(n) {
+  var all = [];
+  spotsInRange().forEach(function (e) {
+    windowsFor(e, 52).forEach(function (w) {
+      if (out_leadHours(w.peak.key) < -1) return;
+      all.push({ spotId: e.spot.id, spotName: e.spot.name, spot: e.spot, date: w.date,
+                 startH: w.startH, endH: w.endH, peak: w.peak, avg: w.avg });
+    });
+  });
+  /* one per day — the best spot on that day — then rank by quality */
+  var byDay = {};
+  all.forEach(function (w) { if (!byDay[w.date] || w.peak.score > byDay[w.date].peak.score) byDay[w.date] = w; });
+  return Object.keys(byDay).map(function (k) { return byDay[k]; })
+    .sort(function (a, b) { return a.date < b.date ? -1 : 1; }).slice(0, n);
+}
+
+/* ════════════════════════════ view: GRID ════════════════════════════
+   Days down, hours across, one cell per hour. Colour is the score, so the
+   week reads as a shape before you read a single number.               */
+
+var GRID_H0 = 5, GRID_H1 = 22;
+
+function renderGrid() {
+  var host = $("#v-grid"); host.innerHTML = "";
+  var entries = spotsInRange();
+  var pinned = S.spotId ? entries.filter(function (e) { return e.spot.id === S.spotId; })[0] : null;
+
+  var head = el("section", "card");
+  head.innerHTML = '<h3>' + (pinned ? esc(pinned.spot.name) : "Best spot each hour") + '</h3>' +
+    '<p class="foot">' + (pinned
+      ? "Every hour of the next " + DAYS + " days at this one beach. Tap a cell for the detail."
+      : "Each cell is the best score available at that hour across all " + entries.length +
+        " spots within " + (S.maxDrive > 900 ? "any drive" : S.maxDrive + " minutes") +
+        ". Tap a cell to see which beach it is.") + '</p>';
+  host.appendChild(head);
+
+  var wrap = el("section", "card gridcard");
+  var scroller = el("div", "gridscroll");
+  var tbl = el("div", "grid");
+
+  var hdr = el("div", "grow ghead");
+  hdr.appendChild(el("div", "gday glbl", ""));
+  for (var h = GRID_H0; h <= GRID_H1; h++) {
+    hdr.appendChild(el("div", "gcellh", h % 3 === 0 ? pad(h) : "·"));
+  }
+  tbl.appendChild(hdr);
+
+  S.model.days.forEach(function (date) {
+    var row = el("div", "grow");
+    var ds = dayShort(date);
+    var dayc = el("div", "gday", '<b>' + (date === madridToday() ? "Today" : ds.wd) + '</b><span>' + ds.dm + '</span>');
+    row.appendChild(dayc);
+    for (var hh = GRID_H0; hh <= GRID_H1; hh++) {
+      var key = date + "T" + pad(hh) + ":00";
+      var best = pinned ? (rowAt(pinned, key) ? { entry: pinned, row: rowAt(pinned, key) } : null) : bestAt(key);
+      var c = el("button", "gcell");
+      if (!best) { c.className += " gnone"; row.appendChild(c); continue; }
+      var r = best.row;
+      var col = scoreCell(r.dark ? Math.min(r.score, 8) : r.score);
+      c.style.background = col.bg; c.style.color = col.ink;
+      if (r.dark) c.className += " gdark";
+      if (!r.dark && r.score >= 78) c.className += " gpeak";
+      if (key === nowKey()) c.className += " gnow";
+      c.textContent = r.dark ? "" : (r.score >= 10 ? r.score : "");
+      c.setAttribute("data-key", key);
+      c.setAttribute("data-spot", best.entry.spot.id);
+      c.setAttribute("aria-label", dayLabel(date) + " " + hhmm(hh) + ", score " + r.score + ", " + best.entry.spot.name);
+      row.appendChild(c);
+    }
+    tbl.appendChild(row);
+  });
+
+  scroller.appendChild(tbl);
+  wrap.appendChild(scroller);
+  wrap.appendChild(el("div", "legend",
+    '<span class="lbl">worse</span>' +
+    [5, 20, 35, 50, 65, 80, 95].map(function (v) {
+      return '<i style="background:' + scoreCell(v).bg + '"></i>';
+    }).join("") +
+    '<span class="lbl">better</span><span class="legdark">dark = night</span>'));
+  host.appendChild(wrap);
+
+  $$(".gcell", wrap).forEach(function (c) {
+    c.addEventListener("click", function () {
+      var k = c.getAttribute("data-key"); if (!k) return;
+      S.sel = { key: k };
+      if (!S.spotId) S.spotId = c.getAttribute("data-spot");
+      setView("now");
+    });
+  });
+
+  /* scroll the grid so the current hour is in view on a phone */
+  requestAnimationFrame(function () {
+    var nowc = $(".gnow", wrap);
+    if (nowc) scroller.scrollLeft = Math.max(0, nowc.offsetLeft - scroller.clientWidth * 0.4);
+  });
+
+  host.appendChild(renderChart(pinned || null));
+}
+
+/* ════════════════════════════ the chart ════════════════════════════ */
+
+function renderChart(pinned) {
+  var card = el("section", "card");
+  card.innerHTML = '<h3>The week, hour by hour</h3>' +
+    '<p class="foot">Wave height at the beach, with the shaded band showing how far apart ECMWF, Météo-France and NOAA are — a wide band means nobody knows yet. Tide underneath, wind as the dotted line. Swipe sideways.</p>';
+
+  var keys = S.model.hours;
+  if (!keys.length) return card;
+
+  var rowFor = function (key) {
+    if (pinned) return rowAt(pinned, key);
+    var b = bestAt(key); return b ? b.row : null;
+  };
+  var rows = keys.map(rowFor);
+
+  var PXH = 15;                                     /* px per hour */
+  var W = keys.length * PXH, H = 210;
+  var padT = 16, padB = 46, waveH = 108, tideTop = H - padB + 4, tideH = 30;
+
+  var maxHs = Math.max(0.6, Math.max.apply(null, rows.map(function (r) {
+    return r ? Math.max(r.localHs, r.band ? r.band.hi * (r.localHs / Math.max(r.offshoreHs, 0.05)) : 0) : 0;
+  })) * 1.15);
+  var maxWind = Math.max(12, Math.max.apply(null, rows.map(function (r) { return r && r.wind != null ? r.wind : 0; })) * 1.1);
+  var tideVals = rows.map(function (r) { return r && r.tide ? r.tide.m : null; }).filter(function (v) { return v != null; });
+  var tLo = tideVals.length ? Math.min.apply(null, tideVals) : -1;
+  var tHi = tideVals.length ? Math.max.apply(null, tideVals) : 1;
+
+  var X = function (i) { return i * PXH + PXH / 2; };
+  var Yw = function (v) { return padT + waveH - (v / maxHs) * waveH; };
+  var Yn = function (v) { return padT + waveH - (v / maxWind) * waveH; };
+  var Yt = function (v) { return tideTop + tideH - ((v - tLo) / Math.max(0.2, tHi - tLo)) * tideH; };
+
+  var svg = ['<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" class="chart" preserveAspectRatio="none">'];
+
+  /* night shading + day dividers */
+  var lastDate = null;
+  keys.forEach(function (k, i) {
+    var r = rows[i], p = parseKey(k);
+    if (r && r.dark) svg.push('<rect x="' + (i * PXH) + '" y="0" width="' + PXH + '" height="' + (H - padB + tideH + 6) + '" class="cnight"/>');
+    if (p.date !== lastDate) {
+      lastDate = p.date;
+      if (i > 0) svg.push('<line x1="' + (i * PXH) + '" y1="0" x2="' + (i * PXH) + '" y2="' + H + '" class="cdiv"/>');
+      var ds = dayShort(p.date);
+      svg.push('<text x="' + (i * PXH + 6) + '" y="13" class="cday">' + esc(p.date === madridToday() ? "TODAY" : ds.wd.toUpperCase() + " " + ds.dm) + '</text>');
+    }
+  });
+
+  /* score ribbon along the top */
+  keys.forEach(function (k, i) {
+    var r = rows[i]; if (!r) return;
+    var s = r.dark ? Math.min(r.score, 8) : r.score;
+    svg.push('<rect x="' + (i * PXH) + '" y="' + (H - padB + 34) + '" width="' + PXH + '" height="8" fill="' + scoreCell(s).bg + '"/>');
+  });
+
+  /* model-agreement band, scaled from offshore to this beach */
+  var bandTop = [], bandBot = [];
+  keys.forEach(function (k, i) {
+    var r = rows[i]; if (!r || !r.band) return;
+    var ratio = r.localHs / Math.max(r.offshoreHs, 0.05);
+    bandTop.push(X(i) + "," + r1(Yw(r.band.hi * ratio)));
+    bandBot.unshift(X(i) + "," + r1(Yw(r.band.lo * ratio)));
+  });
+  if (bandTop.length > 2) svg.push('<polygon points="' + bandTop.concat(bandBot).join(" ") + '" class="cband"/>');
+
+  /* wave height area */
+  var area = [], line = [];
+  keys.forEach(function (k, i) {
+    var r = rows[i]; if (!r) return;
+    line.push((line.length ? "L" : "M") + X(i) + " " + r1(Yw(r.localHs)));
+    area.push(X(i) + "," + r1(Yw(r.localHs)));
+  });
+  if (area.length > 1) {
+    svg.push('<polygon points="' + X(0) + ',' + (padT + waveH) + ' ' + area.join(" ") + ' ' + X(keys.length - 1) + ',' + (padT + waveH) + '" class="carea"/>');
+    svg.push('<path d="' + line.join(" ") + '" class="cwave"/>');
+  }
+
+  /* wind */
+  var wl = [];
+  keys.forEach(function (k, i) {
+    var r = rows[i]; if (!r || r.wind == null) return;
+    wl.push((wl.length ? "L" : "M") + X(i) + " " + r1(Yn(r.wind)));
+  });
+  if (wl.length > 1) svg.push('<path d="' + wl.join(" ") + '" class="cwind2"/>');
+
+  /* tide */
+  var tl = [];
+  keys.forEach(function (k, i) {
+    var r = rows[i]; if (!r || !r.tide || r.tide.m == null) return;
+    tl.push((tl.length ? "L" : "M") + X(i) + " " + r1(Yt(r.tide.m)));
+  });
+  if (tl.length > 1) svg.push('<path d="' + tl.join(" ") + '" class="ctide"/>');
+
+  /* gridlines + now */
+  [0.5, 1, 1.5, 2, 2.5, 3].forEach(function (v) {
+    if (v > maxHs) return;
+    svg.push('<line x1="0" y1="' + r1(Yw(v)) + '" x2="' + W + '" y2="' + r1(Yw(v)) + '" class="cgrid"/>');
+    svg.push('<text x="3" y="' + r1(Yw(v) - 3) + '" class="cax">' + v + ' m</text>');
+  });
+  var ni = keys.indexOf(nowKey());
+  if (ni >= 0) svg.push('<line x1="' + X(ni) + '" y1="0" x2="' + X(ni) + '" y2="' + (H - 4) + '" class="cnow"/>' +
+    '<text x="' + (X(ni) + 4) + '" y="' + (H - 6) + '" class="cnowt">NOW</text>');
+
+  svg.push("</svg>");
+
+  var box = el("div", "chartscroll");
+  box.innerHTML = svg.join("");
+  card.appendChild(box);
+  card.appendChild(el("div", "clegend",
+    '<span><i class="sw-wave"></i>wave height</span>' +
+    '<span><i class="sw-band"></i>model spread</span>' +
+    '<span><i class="sw-wind"></i>wind (kn)</span>' +
+    '<span><i class="sw-tide"></i>tide</span>'));
+
+  box.addEventListener("click", function (ev) {
+    var r = box.getBoundingClientRect();
+    var i = Math.floor((ev.clientX - r.left + box.scrollLeft) / PXH);
+    if (i >= 0 && i < keys.length) {
+      S.sel = { key: keys[i] };
+      if (!S.spotId && !pinned) { var b = bestAt(keys[i]); if (b) S.spotId = b.entry.spot.id; }
+      setView("now");
+    }
+  });
+  requestAnimationFrame(function () {
+    if (ni >= 0) box.scrollLeft = Math.max(0, X(ni) - box.clientWidth * 0.35);
+  });
+  return card;
+}
+
+/* ════════════════════════════ view: SPOTS ════════════════════════════ */
+
+function renderSpots() {
+  var host = $("#v-spots"); host.innerHTML = "";
+  var key = (S.sel && S.sel.key) || nowKey();
+
+  var head = el("section", "card");
+  head.innerHTML = '<h3>Ranked for ' + esc(key === nowKey() ? "right now" : dayLabel(key.slice(0, 10)) + " at " + hhmm(+key.slice(11, 13))) + '</h3>' +
+    '<p class="foot">Seventeen beaches between Rota and Tarifa, scored against this hour and sorted best first. Every one lists where you actually leave the car.</p>';
+  host.appendChild(head);
+
+  /* the board rules, folded away but one tap from everywhere */
+  var rules = el("section", "card rules");
+  rules.innerHTML =
+    '<details><summary><b>Can I bodyboard here?</b> <span>' + esc(RULES.headline) + '</span></summary>' +
+    RULES.body.map(function (b) { return '<div class="rule"><b>' + esc(b.t) + '</b><p>' + esc(b.d) + '</p></div>'; }).join("") +
+    '<p class="foot">' + esc(RULES.note) + '</p></details>';
+  host.appendChild(rules);
+
+  var list = spotsInRange().map(function (e) {
+    return { e: e, r: rowAt(e, key) };
+  }).filter(function (x) { return x.r; })
+    .sort(function (a, b) { return b.r.score - a.r.score; });
+
+  list.forEach(function (x) {
+    host.appendChild(spotCard(x.e.spot, x.r));
+  });
+
+  if (S.maxDrive < 999) {
+    host.appendChild(el("p", "empty",
+      spotsInRange().length + " of " + S.model.spots.length + " spots shown — the drive filter is on."));
+  }
+}
+
+var BBTAG = {
+  open:     { t: "Boards OK year-round", c: "ok" },
+  seasonal: { t: "Summer zone rule", c: "warn" }
+};
+
+function spotCard(spot, sc) {
+  var b = band(sc.score), col = scoreCell(sc.score);
+  var tag = BBTAG[spot.bb.status] || BBTAG.open;
+  var card = el("section", "card spot");
+  var mapsTo = function (la, lo, label) {
+    return "https://www.google.com/maps/dir/?api=1&destination=" + la + "," + lo +
+      "&travelmode=driving" + (label ? "" : "");
+  };
+  card.innerHTML =
+    '<div class="spot-head">' +
+      '<span class="spot-score" style="background:' + col.bg + ';color:' + col.ink + '">' + sc.score + '</span>' +
+      '<div class="spot-id"><h3>' + esc(spot.name) + '</h3>' +
+        '<p class="sub">' + esc(spot.town) + ' · ' + spot.drive + ' min · ' + esc(spot.type) + ' · ' + esc(spot.level) + '</p></div>' +
+      '<span class="bb bb-' + tag.c + '">' + tag.t + '</span>' +
+    '</div>' +
+    '<p class="spot-now">' + r1(sc.localHs) + ' m · ' + (sc.tp == null ? "—" : Math.round(sc.tp) + ' s') +
+      ' · ' + esc(windLabel(sc, spot)) + ' · tide ' + esc(tideLabel(sc.tide)) + ' · <b>' + b.word + '</b></p>' +
+    '<details><summary>Parking, rules, hazards</summary>' +
+      '<div class="sec"><b class="lbl">Park here</b><p>' + esc(spot.park.name) + '</p>' +
+        '<p class="foot">' + esc(spot.park.cost) + ' · ' + esc(spot.park.walk) + ' walk</p>' +
+        '<p>' + esc(spot.park.note) + '</p>' +
+        '<p><a class="link" target="_blank" rel="noopener" href="' + mapsTo(spot.park.lat, spot.park.lon) + '">Drive to the car park ↗</a>' +
+        ' · <a class="link" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + spot.lat + ',' + spot.lon + '">See the break ↗</a></p></div>' +
+      '<div class="sec"><b class="lbl">Bodyboarding</b><p>' + esc(spot.bb.rule) + '</p></div>' +
+      '<div class="sec"><b class="lbl">Watch out for</b><ul>' +
+        spot.hazards.map(function (h) { return '<li>' + esc(h) + '</li>'; }).join("") + '</ul></div>' +
+      (spot.kit && spot.kit.length ? '<div class="sec"><b class="lbl">Bring</b><p>' + esc(spot.kit.join(" · ")) + '</p></div>' : "") +
+      '<div class="sec"><b class="lbl">What it is</b><p>' + esc(spot.why) + '</p>' +
+        '<p class="tip">' + esc(spot.tip) + '</p>' +
+        '<p class="foot">Faces ' + compass(spot.face) + ' · works on ' + compass(spot.win[0]) + '–' + compass(spot.win[1]) +
+        ' swell · offshore in a ' + compass(spot.off) + ' wind · best on the ' + esc(spot.tide) + ' tide · ' + esc(spot.crowd) + '.</p></div>' +
+    '</details>';
+  card.querySelector(".spot-head").addEventListener("click", function () {
+    S.spotId = spot.id; setView("now");
+  });
+  return card;
+}
+
+/* ════════════════════════════ view: LIVE ════════════════════════════ */
+
+function renderLive() {
+  var host = $("#v-live"); host.innerHTML = "";
+
+  var map = el("section", "card");
+  map.innerHTML = '<h3>The swell, moving</h3>' +
+    '<p class="foot">Live animated wave model over the Gulf of Cádiz. Rota is the pin. Pinch to zoom; the layer buttons switch between waves, wind and swell period.</p>' +
+    '<div class="embed"><iframe title="Live wave map for the Gulf of Cádiz" ' +
+      'src="https://embed.windy.com/embed2.html?lat=36.45&lon=-6.55&detailLat=36.625&detailLon=-6.361&zoom=8&overlay=waves&menu=&message=true&marker=true&calendar=now&type=map&location=coordinates&metricWind=kt&metricTemp=%C2%B0C&radarRange=-1" ' +
+      'frameborder="0"></iframe></div>' +
+    '<p class="foot">Map by Windy.com, running the ECMWF wave model — the same model that feeds one third of the confidence band on this site.</p>';
+  host.appendChild(map);
+
+  var cams = el("section", "card");
+  cams.innerHTML = '<h3>Beach cameras</h3>' +
+    '<p class="foot">These camera sites block being embedded in another page, so each one opens in a new tab rather than pretending to work here. There is no public camera pointed at Rota’s own beaches — Las Redes, twenty minutes away, is the closest live view.</p>' +
+    '<div class="camlist">' + CAMS.map(function (c) {
+      return '<a class="cam" target="_blank" rel="noopener" href="' + esc(c.url) + '">' +
+        '<span class="cam-top"><b>' + esc(c.name) + '</b><em>' + esc(c.dist) + '</em></span>' +
+        '<span class="cam-town">' + esc(c.town) + '</span>' +
+        '<span class="cam-note">' + esc(c.note) + '</span>' +
+        '<span class="cam-by">' + esc(c.by) + ' ↗</span></a>';
+    }).join("") + '</div>';
+  host.appendChild(cams);
+
+  var src = el("section", "card");
+  var s = S.model.sources;
+  var row = function (id, label) {
+    var r = s[id];
+    return '<li class="' + (r && r.ok ? "src-ok" : "src-bad") + '"><b>' + esc(label) + '</b>' +
+      '<span>' + (r && r.ok ? "live" : "unavailable — " + esc((r && r.err) || "not loaded")) + '</span></li>';
+  };
+  src.innerHTML = '<h3>Where the numbers come from</h3>' +
+    '<ul class="srclist">' +
+      row("marine", "Waves, swell, sea temperature, tide — Open-Meteo Marine") +
+      row("atmo", "Wind, air, UV, rain, sunrise — Open-Meteo") +
+      row("wavespread", "ECMWF WAM · Météo-France MFWAM · NOAA GFS-Wave") +
+      row("windspread", "ECMWF IFS · NOAA GFS · DWD ICON") +
+    '</ul>' +
+    '<p class="foot">Four independent numerical models from four agencies. The headline number is the best-match blend; the other three are what the confidence badge measures — when they disagree, you are told so instead of being given false precision.</p>' +
+    '<p class="foot">Last refreshed ' + new Date(S.model.at).toLocaleString() +
+      (S.model.stale ? ' — <b>this is the cached copy;</b> the live fetch failed, so treat it as out of date.' : '') + '</p>' +
+    '<p class="foot">Forecasts are forecasts. Tide, wave and wind models are good three days out and guesswork at seven. Look at the beach before you paddle out, and never argue with a red flag.</p>';
+  host.appendChild(src);
+}
+
+/* ════════════════════════════ chrome + boot ════════════════════════════ */
+
+function renderHeader() {
+  var sel = $("#spotSel");
+  if (sel && !sel.dataset.filled) {
+    var opts = ['<option value="">Best spot for me</option>'];
+    var zones = {};
+    S.model.spots.forEach(function (e) { (zones[e.spot.zone] = zones[e.spot.zone] || []).push(e.spot); });
+    Object.keys(zones).forEach(function (z) {
+      opts.push('<optgroup label="' + esc(z) + '">');
+      zones[z].forEach(function (sp) {
+        opts.push('<option value="' + esc(sp.id) + '">' + esc(sp.name) + ' · ' + sp.drive + ' min</option>');
+      });
+      opts.push("</optgroup>");
+    });
+    sel.innerHTML = opts.join("");
+    sel.dataset.filled = "1";
+  }
+  if (sel) sel.value = S.spotId || "";
+
+  var when = $("#whenBar");
+  if (when) {
+    var key = (S.sel && S.sel.key) || nowKey();
+    var isNow = key === nowKey();
+    when.innerHTML = isNow
+      ? '<span class="lbl">showing right now · ' + esc(MTIME.format(new Date())) + ' in Spain</span>'
+      : '<span class="lbl">showing ' + esc(dayLabel(key.slice(0, 10)) + " at " + hhmm(+key.slice(11, 13))) + '</span>' +
+        '<button id="backNow" class="mini">back to now</button>';
+    var bn = $("#backNow");
+    if (bn) bn.addEventListener("click", function () { S.sel = null; render(); });
+  }
+}
+
+function setView(v) {
+  S.view = v;
+  $$(".tab").forEach(function (t) { t.classList.toggle("on", t.getAttribute("data-view") === v); });
+  $$(".panel").forEach(function (p) { p.classList.toggle("hidden", p.id !== "v-" + v); });
+  render();
+  window.scrollTo({ top: 0, behavior: "instant" in document.documentElement.style ? "instant" : "auto" });
+}
+
+function render() {
+  if (!S.model) return;
+  renderHeader();
+  if (S.view === "now") renderNow();
+  else if (S.view === "grid") renderGrid();
+  else if (S.view === "spots") renderSpots();
+  else if (S.view === "live") renderLive();
+}
+
+function showError(msg) {
+  $("#boot").classList.add("hidden");
+  var host = $("#v-now");
+  host.innerHTML = '<section class="card"><h3>Could not reach the forecast</h3>' +
+    '<p>' + esc(msg) + '</p>' +
+    '<p class="foot">Everything here comes from Open-Meteo, which needs no key but does need a connection. ' +
+    'If you have opened this page before, there may be a cached copy — otherwise try again in a moment.</p>' +
+    '<p><button id="retry" class="mini">Try again</button></p></section>';
+  var r = $("#retry"); if (r) r.addEventListener("click", boot);
+}
+
+function boot() {
+  $("#boot").classList.remove("hidden");
+  $("#bootMsg").textContent = "Reading four wave and weather models…";
+
+  /* Show the cached copy immediately so the page is never blank, then
+     replace it the moment the live data lands. */
+  var cached = readCache();
+  if (cached && Date.now() - cached.at < 12 * 3600 * 1000) {
+    try {
+      S.model = buildModel(cached);
+      S.model.stale = Date.now() - cached.at > CACHE_MAX_AGE;
+      $("#boot").classList.add("hidden");
+      $("#app").classList.remove("hidden");
+      render();
+    } catch (e) { /* fall through to the live load */ }
+  }
+
+  loadAll().then(function (raw) {
+    S.model = buildModel(raw);
+    if (!S.model.spots.length) throw new Error("The models returned no usable hours.");
+    $("#boot").classList.add("hidden");
+    $("#app").classList.remove("hidden");
+    render();
+  }).catch(function (e) {
+    if (S.model) {              /* the cached copy is already on screen */
+      S.model.stale = true;
+      var w = $("#whenBar");
+      if (w) w.insertAdjacentHTML("beforeend", '<span class="stale">offline — cached</span>');
+      return;
+    }
+    showError(String(e.message || e));
+  });
+}
+
+/* A read-only handle on the live model, so conditions can be inspected from
+   the console without re-deriving any of this by hand. */
+window.__SURF_STATE__ = S;
+
+/* ── events ── */
+document.addEventListener("DOMContentLoaded", function () {
+  $$(".tab").forEach(function (t) {
+    t.addEventListener("click", function () { setView(t.getAttribute("data-view")); });
+  });
+  var sel = $("#spotSel");
+  if (sel) sel.addEventListener("change", function () {
+    S.spotId = sel.value || null; render();
+  });
+  var drv = $("#driveSel");
+  if (drv) drv.addEventListener("change", function () {
+    S.maxDrive = +drv.value || 999;
+    if (S.spotId) {
+      var still = S.model && spotsInRange().some(function (e) { return e.spot.id === S.spotId; });
+      if (!still) S.spotId = null;
+    }
+    render();
+  });
+  var th = $("#themeBtn");
+  if (th) th.addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    var next = cur === "dark" ? "light" : cur === "light" ? "" : "dark";
+    if (next) document.documentElement.setAttribute("data-theme", next);
+    else document.documentElement.removeAttribute("data-theme");
+    try { localStorage.setItem("rotasurf.theme", next); } catch (e) {}
+  });
+  try {
+    var saved = localStorage.getItem("rotasurf.theme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+  } catch (e) {}
+
+  boot();
+
+  /* Keep it honest if the phone sits in a pocket for an hour. */
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden || !S.model) return;
+    if (Date.now() - S.model.at > CACHE_MAX_AGE) boot();
+    else render();
+  });
+  window.addEventListener("resize", function () {
+    if (S.view === "now") { var p = currentPick(), cv = $("#waveCv"); if (p && cv) drawWave(cv, p.row, p.entry.spot); }
+  });
+});
+
+})();
