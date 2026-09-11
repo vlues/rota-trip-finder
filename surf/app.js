@@ -864,8 +864,95 @@ var S = {
   filters: { boards: false, beginner: false, freePark: false, noRocks: false },
   plan: null,          /* the last "just tell me" answer, kept across re-renders */
   bar: 62,             /* the score you personally think is worth the drive */
+  me: null,            /* {lat, lon} once you ask for "nearest to me" */
+  sortBy: "score",     /* score | near */
+  origin: "town",      /* town | base | me — what the drive times are measured from */
+  when: "any",         /* which part of the day to plan for */
+  gear: { fins: true, suit: "full" },   /* what you actually own */
   err: null
 };
+
+/* ── where you are driving from ──────────────────────────────────────────
+   The drive times in data.js are hand-written from Rota town. Rather than
+   throw those away for a new starting point, only the difference is applied:
+   1.15 minutes per straight-line kilometre, fitted against those same
+   seventeen figures. The town stays exact and everything else shifts by a
+   couple of minutes, which is the honest size of the effect. */
+var ROTA_TOWN = { lat: 36.6247, lon: -6.3606 };
+var MIN_PER_KM = 1.154;
+var ORIGINS = [
+  { id: "town", label: "from Rota town", short: "Rota town", lat: 36.6247, lon: -6.3606 },
+  { id: "base", label: "from the naval station", short: "the base", lat: 36.6290, lon: -6.3400 },
+  { id: "me",   label: "from where I am", short: "you" }
+];
+function originPoint() {
+  if (S.origin === "me") return S.me;
+  var o = ORIGINS.filter(function (x) { return x.id === S.origin; })[0];
+  return o && o.lat != null ? o : null;
+}
+function originLabel() {
+  var o = ORIGINS.filter(function (x) { return x.id === S.origin; })[0];
+  return o ? o.short : "Rota";
+}
+function driveMin(spot) {
+  var o = originPoint();
+  if (!o || S.origin === "town") return spot.drive;
+  var fromTown = haversineKm(ROTA_TOWN.lat, ROTA_TOWN.lon, spot.lat, spot.lon);
+  var fromHere = haversineKm(o.lat, o.lon, spot.lat, spot.lon);
+  return Math.max(3, Math.round(spot.drive + MIN_PER_KM * (fromHere - fromTown)));
+}
+
+/* ── when you want to go ── */
+var WHEN_OPTS = [
+  { id: "any",  label: "any time of day" },
+  { id: "dawn", label: "dawn patrol",  test: function (r) { return r.hour * 60 <= r.sun.up + 150; } },
+  { id: "am",   label: "morning",      test: function (r) { return r.hour >= 9 && r.hour < 12; } },
+  { id: "pm",   label: "afternoon",    test: function (r) { return r.hour >= 12 && r.hour < 17; } },
+  { id: "eve",  label: "evening",      test: function (r) { return r.hour >= 17; } }
+];
+function whenTest() {
+  var o = WHEN_OPTS.filter(function (x) { return x.id === S.when; })[0];
+  return (o && o.test) || null;
+}
+
+/* ── what you actually own ──────────────────────────────────────────────
+   Advice you cannot act on is not advice: if you have no wetsuit there is no
+   point being sent to 16 °C water, and without fins you will not get out the
+   back of anything with size or current in it. */
+var SUIT_RANK = { none: 0, shorty: 1, full: 2 };
+var SUIT_OPTS = [
+  { id: "full",   label: "a full wetsuit" },
+  { id: "shorty", label: "a shorty only" },
+  { id: "none",   label: "no wetsuit" }
+];
+function suitNeeded(sst) {
+  if (sst == null) return "full";
+  return sst >= 22 ? "none" : sst >= 19 ? "shorty" : "full";
+}
+function gearGap(sc, spot) {
+  var out = [];
+  var need = suitNeeded(sc.sst);
+  if (SUIT_RANK[S.gear.suit] < SUIT_RANK[need]) {
+    out.push({
+      k: "suit",
+      t: sc.sst == null ? "The water wants a wetsuit you have not got."
+        : "At " + r1(sc.sst) + " °C you want " + (need === "full" ? "a full suit" : "at least a shorty") +
+          ", and you said " + (S.gear.suit === "none" ? "no wetsuit" : "a shorty") +
+          ". Expect a short session and be honest about when you start shivering."
+    });
+  }
+  if (!S.gear.fins) {
+    var ripL = ripRisk(spot, sc).level;
+    if (sc.localHs >= 0.9 || ripL >= 1) {
+      out.push({
+        k: "fins",
+        t: "Without fins you will struggle to get out past " + mtr(sc.localHs) +
+           (ripL >= 1 ? " with a rip running" : "") + ", and you will catch far fewer waves. Fins are the engine on a sponge."
+      });
+    }
+  }
+  return out;
+}
 var BAR_OPTS = [
   { v: 46, label: "anything rideable" },
   { v: 62, label: "worth the drive" },
@@ -889,7 +976,7 @@ function passesFilters(spot, date, hour) {
 }
 
 function spotsInRange() {
-  return S.model.spots.filter(function (e) { return e.spot.drive <= S.maxDrive; });
+  return S.model.spots.filter(function (e) { return driveMin(e.spot) <= S.maxDrive; });
 }
 function rowAt(entry, key) { return entry.byKey[key]; }
 function nowKey() {
@@ -1337,7 +1424,7 @@ function renderNow() {
       '<div class="hero-when">' +
         '<span class="lbl">' + (isNow ? "right now" : dayLabel(sc.date) + " · " + hhmm(sc.hour)) + '</span>' +
         '<h2>' + esc(spot.name) + '</h2>' +
-        '<p class="sub">' + esc(spot.town) + ' · ' + spot.drive + ' min from Rota' +
+        '<p class="sub">' + esc(spot.town) + ' · ' + driveMin(spot) + ' min from ' + esc(originLabel()) +
           (S.spotId ? "" : ' · <b>best of ' + spotsInRange().length + ' spots</b>') + '</p>' +
       '</div>' +
       '<div class="hero-score"><b>' + sc.score + '</b><span>/100</span></div>' +
@@ -1526,6 +1613,44 @@ function renderNow() {
   startWaveLoop();
 }
 
+/* ── what to plan for: when, and what you are carrying ──────────────── */
+function prefsHtml() {
+  return '<div class="prefs">' +
+    '<label>go <select id="whenSel" aria-label="Which part of the day">' +
+      WHEN_OPTS.map(function (o) {
+        return '<option value="' + o.id + '"' + (o.id === S.when ? " selected" : "") + '>' + esc(o.label) + '</option>';
+      }).join("") + '</select></label>' +
+    '<label>with <select id="suitSel" aria-label="What wetsuit you have">' +
+      SUIT_OPTS.map(function (o) {
+        return '<option value="' + o.id + '"' + (o.id === S.gear.suit ? " selected" : "") + '>' + esc(o.label) + '</option>';
+      }).join("") + '</select></label>' +
+    '<label class="gearbox"><input type="checkbox" id="finsChk"' + (S.gear.fins ? " checked" : "") + '>fins</label>' +
+  '</div>';
+}
+
+function wirePrefs(card) {
+  var save = function () {
+    try { localStorage.setItem("rotasurf.gear", JSON.stringify({ when: S.when, gear: S.gear })); }
+    catch (e) { /* private mode */ }
+  };
+  var w = $("#whenSel", card), su = $("#suitSel", card), f = $("#finsChk", card);
+  if (w) w.addEventListener("change", function () {
+    S.when = this.value; save();
+    if (S.plan) S.plan = recommend();
+    render();
+  });
+  if (su) su.addEventListener("change", function () {
+    S.gear.suit = this.value; save();
+    if (S.plan) S.plan = recommend();
+    render();
+  });
+  if (f) f.addEventListener("change", function () {
+    S.gear.fins = this.checked; save();
+    if (S.plan) S.plan = recommend();
+    render();
+  });
+}
+
 /* ── the one-button answer ──────────────────────────────────────────── */
 function renderPlanCard(host) {
   var card = el("section", "card plan");
@@ -1533,9 +1658,12 @@ function renderPlanCard(host) {
     card.innerHTML = '<h3>Just tell me where to go</h3>' +
       '<p class="foot">One answer instead of a dashboard: the best beach and hour in the next ' + DAYS +
       ' days, picked only from hours you are actually allowed to ride in, with the reasoning behind it.</p>' +
+      prefsHtml() +
       '<div class="shrow"><button id="planBtn" class="btn btn-go">Plan my session</button>' +
-      '<span class="foot">uses your drive limit' + (S.maxDrive > 900 ? "" : " of " + S.maxDrive + " min") + '</span></div>';
+      '<span class="foot">from ' + esc(originLabel()) +
+        (S.maxDrive > 900 ? "" : ", within " + S.maxDrive + " min") + '</span></div>';
     host.appendChild(card);
+    wirePrefs(card);
     $("#planBtn").addEventListener("click", function () { S.plan = recommend(); render(); });
     return;
   }
@@ -1559,13 +1687,14 @@ function renderPlanCard(host) {
   card.innerHTML =
     '<div class="plan-head"><h3>Go here</h3>' +
       '<button id="planAgain" class="mini">re-plan</button></div>' +
+    prefsHtml() +
     (P.weak ? '<p class="plan-warn">Honestly, it is a poor week — nothing clears a real bar. This is the ' +
       'least-bad session going, not a good one.</p>' : '') +
     '<div class="plan-hero">' +
       '<span class="plan-score" style="background:' + col.bg + ';color:' + col.ink + '">' + r.score + '</span>' +
       '<div><b>' + esc(spot.name) + '</b>' +
         '<span>' + esc(dayLabel(c.date)) + ' · ' + hhmm(c.win.from) + '–' + hhmm(c.win.to + 1) + '</span>' +
-        '<span>' + esc(spot.town) + ' · ' + spot.drive + ' min from Rota</span></div>' +
+        '<span>' + esc(spot.town) + ' · ' + driveMin(spot) + ' min from ' + esc(originLabel()) + '</span></div>' +
     '</div>' +
     '<div class="plan-line"><b>Leave at ' + lv.at + '</b> to be in the water for ' + hhmm(c.win.from) +
       (lv.note ? ' (' + lv.note + ')' : '') + '. Best single hour is ' + hhmm(r.hour) + '.</div>' +
@@ -1586,6 +1715,13 @@ function renderPlanCard(host) {
       '&travelmode=driving">Directions ↗</a></p></div>' +
     '<div class="rule"><b>Wear and bring</b><p>' + esc(suit.suit) + '. ' +
       esc(kitFor(r, spot).map(function (k) { return k.label; }).join(" · ")) + '.</p></div>' +
+    (c.gaps && c.gaps.length
+      ? c.gaps.map(function (g) {
+          return '<div class="rule law-warn"><b>' +
+            (g.k === "suit" ? "You said no full wetsuit" : "You said no fins") +
+            '</b><p>' + esc(g.t) + '</p></div>';
+        }).join("")
+      : '') +
     (rip.level >= 1
       ? '<div class="rule law-rip' + rip.level + '"><b>Rip risk ' + rip.label.toLowerCase() + '</b><p>' +
         esc(capitalise(rip.why)) + '.' + (rip.advice ? " " + esc(rip.advice) : "") + '</p></div>'
@@ -1604,6 +1740,7 @@ function renderPlanCard(host) {
       '<button id="planShare" class="btn">Share it</button><span class="foot sharemsg"></span></div>';
 
   host.appendChild(card);
+  wirePrefs(card);
   $("#planAgain").addEventListener("click", function () { S.plan = recommend(); render(); });
   $("#planOpen").addEventListener("click", function () {
     S.spotId = spot.id; S.sel = { key: r.key }; render();
@@ -1873,7 +2010,11 @@ function recommend() {
     S.model.days.forEach(function (date) {
       /* Only hours where a board is legal here: advice you cannot act on
          is not advice. */
-      var legal = function (r) { return !boardRule(spot, date, r.hour).restricted; };
+      var wt = whenTest();
+      var legal = function (r) {
+        if (boardRule(spot, date, r.hour).restricted) return false;
+        return wt ? wt(r) : true;
+      };
       var win = dayWindowFor(e, date, legal);
       if (!win) return;
       var lead = out_leadHours(win.peak.key);
@@ -1881,13 +2022,20 @@ function recommend() {
 
       var conf = confidenceOf(win.peak, win.peak.key);
       var v = win.peak.score;
-      v -= Math.max(0, spot.drive - 20) * 0.07;    /* a long drive has to earn it */
+      v -= Math.max(0, driveMin(spot) - 20) * 0.07;    /* a long drive has to earn it */
       v -= (3 - conf.level) * 4;                   /* prefer what we are sure of */
       /* A session six days out has to be clearly better than one in two days,
          not marginally: the near one is both likelier to happen and likelier
          to be right. */
       v -= clamp(lead, 0, 240) / 24 * 1.5;
-      cands.push({ entry: e, spot: spot, date: date, win: win, conf: conf, value: v, lead: lead });
+      /* Sessions you are not equipped for are worth less to you than to
+         someone with a full quiver, so say so in the ranking, not just in a
+         footnote afterwards. */
+      var gaps = gearGap(win.peak, spot);
+      v -= gaps.length * 9;
+
+      cands.push({ entry: e, spot: spot, date: date, win: win, conf: conf,
+                   value: v, lead: lead, gaps: gaps });
     });
   });
   if (!cands.length) return null;
@@ -1938,7 +2086,7 @@ function reasonsFor(c) {
     out.push({ t: "Why then", d: "It is the best stretch of daylight on the least bad day." });
     return out;
   }
-  var near = spotsInRange().filter(function (x) { return x.spot.drive <= 20; })
+  var near = spotsInRange().filter(function (x) { return driveMin(x.spot) <= 20; })
     .map(function (x) { return rowAt(x, r.key); }).filter(Boolean)
     .reduce(function (a, x) { return !a || x.score > a.score ? x : a; }, null);
   if (e && e.gap > 6) {
@@ -1955,10 +2103,10 @@ function reasonsFor(c) {
     out.push({ t: "Why here", d: "It scores highest of the " + spotsInRange().length +
       " beaches in range at that hour" + (e ? ", just ahead of " + e.rival.name + " on " + e.rivalScore : "") + "." });
   }
-  if (spot.drive > 30 && near && near.score < r.score - 12) {
+  if (driveMin(spot) > 30 && near && near.score < r.score - 12) {
     out.push({ t: "Worth the drive?", d: "Yes. Nothing within twenty minutes of Rota gets above " +
       near.score + " out of 100 at that hour, against " + r.score + " here — that gap is what the " +
-      spot.drive + "-minute drive is buying." });
+      driveMin(spot) + "-minute drive is buying." });
   }
 
   /* — why then — */
@@ -2016,7 +2164,7 @@ function capitalise(t) { return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; 
 
 /* What time to pull out of the drive, so you are in the water at the start. */
 function leaveAt(spot, hour) {
-  var mins = hour * 60 - spot.drive - 15;          /* 15 min to change and walk down */
+  var mins = hour * 60 - driveMin(spot) - 15;          /* 15 min to change and walk down */
   var d = mins < 0 ? "the night before" : null;
   mins = ((mins % 1440) + 1440) % 1440;
   return { at: pad(Math.floor(mins / 60)) + ":" + pad(mins % 60), note: d };
@@ -2281,7 +2429,7 @@ function buildMap(key) {
     var m = L.marker([e.spot.lat, e.spot.lon], {
       icon: icon, title: e.spot.name, zIndexOffset: Math.round(shown) + (on ? 500 : 0)
     }).addTo(mapObj);
-    m.bindPopup('<b>' + esc(e.spot.name) + '</b><br>' + esc(e.spot.town) + ' · ' + e.spot.drive + ' min<br>' +
+    m.bindPopup('<b>' + esc(e.spot.name) + '</b><br>' + esc(e.spot.town) + ' · ' + driveMin(e.spot) + ' min<br>' +
       mtr(r.localHs) + ' · ' + esc(windLabel(r, e.spot)) + '<br><i>' + band(r.score).word + '</i>');
     m.on("click", function () { S.spotId = e.spot.id; setView("now"); });
     pts.push([e.spot.lat, e.spot.lon]);
@@ -2432,7 +2580,7 @@ function spotCard(entry, sc) {
     '<div class="spot-head">' +
       '<span class="spot-score" style="background:' + col.bg + ';color:' + col.ink + '">' + sc.score + '</span>' +
       '<div class="spot-id"><h3>' + esc(spot.name) + '</h3>' +
-        '<p class="sub">' + esc(spot.town) + ' · ' + spot.drive + ' min from Rota' +
+        '<p class="sub">' + esc(spot.town) + ' · ' + driveMin(spot) + ' min from ' + esc(originLabel()) +
         (km != null ? ' · <b>' + (km < 10 ? r1(km) : Math.round(km)) + ' km from you</b>' : '') +
         ' · ' + esc(spot.type) + ' · ' + esc(spot.level) + '</p></div>' +
       '<span class="bb bb-' + tag.c + '">' + tag.t + '</span>' +
@@ -2641,6 +2789,8 @@ function renderHeader() {
     sel.dataset.filled = "1";
   }
   if (sel) sel.value = S.spotId || "";
+  var org2 = $("#originSel");
+  if (org2) org2.value = S.origin;
 
   var when = $("#whenBar");
   if (when) {
@@ -2760,6 +2910,30 @@ document.addEventListener("DOMContentLoaded", function () {
   if (sel) sel.addEventListener("change", function () {
     S.spotId = sel.value || null; render();
   });
+  var org = $("#originSel");
+  if (org) {
+    org.value = S.origin;
+    org.addEventListener("change", function () {
+      var want = this.value;
+      if (want === "me" && !S.me) {
+        if (!navigator.geolocation) { this.value = S.origin; return; }
+        var sel = this;
+        navigator.geolocation.getCurrentPosition(function (p) {
+          S.me = { lat: p.coords.latitude, lon: p.coords.longitude };
+          S.origin = "me";
+          try { localStorage.setItem("rotasurf.origin", S.origin); } catch (e) {}
+          if (S.plan) S.plan = recommend();
+          render();
+        }, function () { sel.value = S.origin; });
+        return;
+      }
+      S.origin = want;
+      try { localStorage.setItem("rotasurf.origin", S.origin); } catch (e) {}
+      if (S.plan) S.plan = recommend();
+      render();
+    });
+  }
+
   var drv = $("#driveSel");
   if (drv) drv.addEventListener("change", function () {
     S.maxDrive = +drv.value || 999;
@@ -2777,6 +2951,17 @@ document.addEventListener("DOMContentLoaded", function () {
     else document.documentElement.removeAttribute("data-theme");
     try { localStorage.setItem("rotasurf.theme", next); } catch (e) {}
   });
+  try {
+    var g = JSON.parse(localStorage.getItem("rotasurf.gear") || "null");
+    if (g) {
+      if (g.when) S.when = g.when;
+      if (g.gear) S.gear = { fins: g.gear.fins !== false, suit: g.gear.suit || "full" };
+    }
+    var o = localStorage.getItem("rotasurf.origin");
+    /* "me" needs a fresh fix each session, so it is not restored. */
+    if (o === "town" || o === "base") S.origin = o;
+  } catch (e) { /* private mode */ }
+
   try {
     var saved = localStorage.getItem("rotasurf.theme");
     if (saved) document.documentElement.setAttribute("data-theme", saved);

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#F2F7F9" media="(prefers-color-scheme:light)">
 <meta name="theme-color" content="#071620" media="(prefers-color-scheme:dark)">
 <title>Rota Wave Watch</title>
-<meta name="app-version" content="20260911221319">
+<meta name="app-version" content="20260911223040">
 <meta name="description" content="Live bodyboarding conditions for Rota and the Gulf of Cádiz — when to go, where to park, what to wear, and whether boards are allowed.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -85,7 +85,20 @@ header{position:sticky;top:0;z-index:50;background:var(--panel);border-bottom:1p
   background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
   background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;
   padding-right:26px}
-#driveSel{flex:0 0 auto;width:104px}
+#driveSel{flex:0 0 auto;width:98px}
+#originSel{flex:0 0 auto;width:124px}
+.controls{flex-wrap:wrap}
+/* the beach picker gets its own line so the three selects never crush */
+#spotSel{flex:1 1 100%;order:-1}
+
+/* ───────────────────── plan preferences ───────────────────── */
+.prefs{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;align-items:center}
+.prefs label{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted)}
+.prefs select{border:1px solid var(--line);background:var(--sunk);border-radius:8px;
+  padding:4px 8px;font-size:12.5px;color:var(--ink)}
+.prefs .gearbox{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-2);
+  border:1px solid var(--line);border-radius:999px;padding:4px 10px;cursor:pointer}
+.prefs .gearbox input{margin:0;accent-color:var(--teal)}
 .iconbtn{border:1px solid var(--line);border-radius:8px;width:34px;height:34px;display:grid;place-items:center;
   background:var(--sunk);flex:0 0 auto;font-size:14px}
 #whenBar{display:flex;align-items:center;gap:8px;margin-top:7px;min-height:18px;flex-wrap:wrap}
@@ -463,6 +476,11 @@ details[open]>summary:before{content:"▾ "}
   </div>
   <div class="controls">
     <select id="spotSel" aria-label="Which beach"><option>Loading…</option></select>
+    <select id="originSel" aria-label="Where you are driving from">
+      <option value="town">from Rota town</option>
+      <option value="base">from the base</option>
+      <option value="me">from where I am</option>
+    </select>
     <select id="driveSel" aria-label="Maximum drive">
       <option value="999">any drive</option>
       <option value="20">≤ 20 min</option>
@@ -515,9 +533,9 @@ details[open]>summary:before{content:"▾ "}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <!-- Shared, secret-free build config: carries the deployed Worker URL so Live
      check needs no per-device setup. Same file the other sub-apps use. -->
-<script src="../build-check.js?v=20260911221319"></script>
-<script src="../config.js?v=20260911221319"></script>
-<script src="./data.js?v=20260911221319"></script>
-<script src="./app.js?v=20260911221319"></script>
+<script src="../build-check.js?v=20260911223040"></script>
+<script src="../config.js?v=20260911223040"></script>
+<script src="./data.js?v=20260911223040"></script>
+<script src="./app.js?v=20260911223040"></script>
 </body>
 </html>
