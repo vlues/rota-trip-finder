@@ -86,10 +86,12 @@ function hhmm(h) { return pad(h) + ":00"; }
 /* ───────────────────────────── data fetching ───────────────────────────── */
 
 var MARINE_VARS = ["wave_height", "wave_direction", "wave_period", "wind_wave_height",
-  "wind_wave_period", "swell_wave_height", "swell_wave_direction", "swell_wave_period",
-  "sea_surface_temperature", "sea_level_height_msl"].join(",");
+  "wind_wave_period", "wind_wave_direction", "swell_wave_height", "swell_wave_direction",
+  "swell_wave_period", "swell_wave_peak_period", "sea_surface_temperature",
+  "sea_level_height_msl", "ocean_current_velocity", "ocean_current_direction"].join(",");
 var ATMO_VARS = ["wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "temperature_2m",
-  "precipitation", "precipitation_probability", "uv_index", "weather_code", "cloud_cover"].join(",");
+  "apparent_temperature", "precipitation", "precipitation_probability", "uv_index",
+  "weather_code", "cloud_cover", "visibility", "pressure_msl"].join(",");
 var WAVE_MODELS = "ecmwf_wam025,meteofrance_wave,ncep_gfswave025";
 var ATMO_MODELS = "ecmwf_ifs025,gfs_seamless,icon_seamless";
 
@@ -399,10 +401,14 @@ function scoreHour(spot, m, a, st, sun, hour) {
     localHs: localHs, offshoreHs: hs, tp: tp, swellDir: swellDir,
     /* the two halves of the sea state, kept apart: one you can ride, one
        is just the local wind roughing up the surface */
-    swellH: sw, swellT: m.swell_wave_period, windWaveH: ww, windWaveT: m.wind_wave_period,
+    swellH: sw, swellT: m.swell_wave_period, swellPeakT: m.swell_wave_peak_period,
+    windWaveH: ww, windWaveT: m.wind_wave_period, windWaveDir: m.wind_wave_direction,
     wind: a.wind_speed_10m, windDir: a.wind_direction_10m, gust: a.wind_gusts_10m,
-    airT: a.temperature_2m, sst: m.sea_surface_temperature, uv: a.uv_index,
+    airT: a.temperature_2m, feelsT: a.apparent_temperature,
+    sst: m.sea_surface_temperature, uv: a.uv_index,
     rain: a.precipitation, rainP: a.precipitation_probability, cloud: a.cloud_cover,
+    vis: a.visibility, pressure: a.pressure_msl,
+    curV: m.ocean_current_velocity, curDir: m.ocean_current_direction,
     tide: st, dark: dark, twilight: twilight, flat: flat, punch: punch,
     parts: { size: sz, wind: wd, period: pd, tide: td, dir: dr },
     offBy: rf.offBy
@@ -585,6 +591,71 @@ function nextTides(entry, key, n, refMin) {
   return out;
 }
 
+/* ── spring or neap ──────────────────────────────────────────────────────
+   Taken from the tide's own behaviour rather than from the calendar: the
+   biggest range in the forecast window is a spring, the smallest a neap. The
+   moon is only there to explain why, because "spring tide" sounds seasonal
+   and is not. */
+var MOON_NAMES = ["new moon", "waxing crescent", "first quarter", "waxing gibbous",
+                  "full moon", "waning gibbous", "last quarter", "waning crescent"];
+function moonAge(date) {
+  var p = date.split("-");
+  var d = Date.UTC(+p[0], +p[1] - 1, +p[2], 12);
+  var known = Date.UTC(2000, 0, 6, 18, 14);      /* a known new moon */
+  var syn = 29.530588853;
+  return ((((d - known) / 86400000) % syn) + syn) % syn;
+}
+function moonName(date) {
+  var a = moonAge(date), syn = 29.530588853;
+  return MOON_NAMES[Math.floor(((a / syn) * 8 + 0.5) % 8)];
+}
+function dayRange(entry, date) {
+  var t = tidesOn(entry, date);
+  if (t.length < 2) return null;
+  var hs = t.map(function (x) { return x.m; });
+  return Math.max.apply(null, hs) - Math.min.apply(null, hs);
+}
+function tideKind(entry, date) {
+  var here = dayRange(entry, date);
+  if (here == null) return null;
+  var all = S.model.days.map(function (d) { return dayRange(entry, d); })
+    .filter(function (v) { return v != null; });
+  if (all.length < 3) return null;
+  var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+  if (hi - lo < 0.3) return { kind: "average", range: here, moon: moonName(date) };
+  var f = (here - lo) / (hi - lo);
+  return {
+    kind: f > 0.66 ? "spring" : f < 0.34 ? "neap" : "average",
+    range: here, moon: moonName(date)
+  };
+}
+
+/* ── how far away is it, from wherever you are standing ── */
+function haversineKm(a, b, c, d) {
+  var R = 6371, p = Math.PI / 180;
+  var dLat = (c - a) * p, dLon = (d - b) * p;
+  var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(a * p) * Math.cos(c * p) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+function distanceFromMe(spot) {
+  if (!S.me) return null;
+  return haversineKm(S.me.lat, S.me.lon, spot.lat, spot.lon);
+}
+
+/* ── the best this beach gets in the whole forecast window ── */
+function bestWindowForSpot(entry) {
+  var best = null;
+  S.model.days.forEach(function (date) {
+    var legal = function (r) { return !boardRule(entry.spot, date, r.hour).restricted; };
+    var w = dayWindowFor(entry, date, legal);
+    if (!w) return;
+    if (out_leadHours(w.peak.key) < -1) return;          /* already gone */
+    if (!best || w.peak.score > best.peak.score) best = { date: date, from: w.from, to: w.to, peak: w.peak };
+  });
+  return best;
+}
+
 /* ─────────────────── is a board legal here, right now? ───────────────────
    The ordinance is seasonal and hour-bound, so the honest answer changes
    through the day. This turns the static rule into a live yes or no, and
@@ -693,6 +764,93 @@ function weekOutlook() {
       conf: confidenceOf(best.row, best.row.key)
     };
   });
+}
+
+/* ── one day, written out ───────────────────────────────────────────────
+   The week list used to be a single line per day. It now opens into the
+   whole day: the date in full, why that hour and not another, the weather
+   you will actually be standing in, and the tide. */
+var WD_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var MO_FULL = ["January", "February", "March", "April", "May", "June", "July",
+               "August", "September", "October", "November", "December"];
+function fullDate(iso) {
+  var p = iso.split("-"), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+  return WD_FULL[d.getUTCDay()] + " " + (+p[2]) + " " + MO_FULL[+p[1] - 1];
+}
+
+/* Why this hour on this day, in one sentence, from the numbers. */
+function dayWhy(d) {
+  var r = d.best.row, sp = d.best.entry.spot;
+  var rows = d.best.entry.rows.filter(function (x) { return x.date === d.date && !x.dark; });
+  var bits = [];
+  var winds = rows.map(function (x) { return x.wind; }).filter(function (v) { return v != null; });
+  if (r.wind != null && winds.length && r.wind <= Math.min.apply(null, winds) + 2) {
+    bits.push("the wind is at its lightest");
+  } else if (r.wind != null && r.windDir != null && angDiff(r.windDir, sp.off) < 55) {
+    bits.push("the wind is offshore");
+  }
+  if (r.parts.tide >= 65) bits.push("the tide is where this beach wants it");
+  if (r.parts.size >= 70) bits.push("there is enough size in the water");
+  if (r.parts.period >= 70) bits.push("the swell has real period behind it");
+  var law = boardRule(sp, d.date, r.hour);
+  if (sp.bb.status === "seasonal" && inBathingSeason(d.date) && r.hour < GUARD_ON) {
+    bits.push("and you are in before the towers open");
+  }
+  if (!bits.length) bits.push("it is simply the best of a quiet day");
+  var s = bits.join(", ");
+  return s.charAt(0).toUpperCase() + s.slice(1) + ".";
+}
+
+function dayRowHtml(d) {
+  if (d.empty) {
+    return '<div class="day day-none"><b>' + esc(dayLabel(d.date)) + '</b> <span>no data</span></div>';
+  }
+  var r = d.best.row, sp = d.best.entry.spot, col = scoreCell(r.score);
+  var range = d.run.from === d.run.to ? hhmm(d.run.from) : hhmm(d.run.from) + "–" + hhmm(d.run.to + 1);
+  var isToday = d.date === madridToday();
+  var tk = tideKind(d.best.entry, d.date);
+  var tides = tidesOn(d.best.entry, d.date);
+
+  var chip = function (k, v) { return v ? '<span><em>' + esc(k) + '</em>' + esc(v) + '</span>' : ""; };
+
+  return '<details class="day' + (r.score >= S.bar ? " day-hit" : "") + '"' + (isToday ? " open" : "") + '>' +
+    '<summary>' +
+      '<span class="day-score" style="background:' + col.bg + ';color:' + col.ink + '">' + r.score + '</span>' +
+      '<span class="day-main"><b>' + esc(dayLabel(d.date)) + ' · ' + range + '</b>' +
+      '<span>' + esc(sp.name) + ' · ' + mtr(r.localHs) + ' · ' + esc(windLabel(r, sp)) + '</span></span>' +
+      '<span class="day-tag">' + band(r.score).word +
+        '<em class="c' + d.conf.level + '">' + d.conf.label.toLowerCase() + '</em></span>' +
+    '</summary>' +
+    '<div class="day-body">' +
+      '<p class="day-date">' + esc(fullDate(d.date)) + '</p>' +
+      '<p class="day-why"><b>Why then:</b> ' + esc(dayWhy(d)) + ' Peak hour is ' + hhmm(r.hour) + '.</p>' +
+      '<div class="day-facts">' +
+        chip("wave", mtr(r.localHs)) +
+        chip("period", r.tp == null ? "" : Math.round(r.tp) + " s") +
+        chip("swell", r.swellDir == null ? "" : "from " + compass(r.swellDir)) +
+        chip("wind", r.wind == null ? "" : Math.round(r.wind) + " kn " + compass(r.windDir) +
+          (r.gust ? " (gusts " + Math.round(r.gust) + ")" : "")) +
+        chip("water", r.sst == null ? "" : r1(r.sst) + " °C") +
+        chip("air", r.airT == null ? "" : Math.round(r.airT) + " °C" +
+          (r.feelsT != null ? ", feels " + Math.round(r.feelsT) : "")) +
+        chip("sky", cloudWord(r) + (r.rainP ? " · " + r.rainP + "% rain" : "")) +
+        chip("uv", r.uv == null ? "" : String(Math.round(r.uv))) +
+        chip("light", hhmm(Math.floor(r.sun.up / 60)) + "–" + hhmm(Math.floor(r.sun.down / 60))) +
+      '</div>' +
+      (tides.length
+        ? '<p class="day-tide"><b>Tide:</b> ' + tides.map(function (t) {
+            return (t.type === "high" ? "▲" : "▼") + " " + t.at;
+          }).join(" · ") +
+          (tk ? ' — ' + esc(tk.kind === "spring" ? "a spring tide, big range (" + r1(tk.range) + " m), so the water moves fast"
+               : tk.kind === "neap" ? "a neap tide, small range (" + r1(tk.range) + " m), so it changes slowly"
+               : "an average range (" + r1(tk.range) + " m)") + ', ' + esc(tk.moon) : '') +
+          '</p>'
+        : '') +
+      '<p class="day-wear"><b>Wear:</b> ' + esc(suitFor(r.sst).suit) + '</p>' +
+      '<button class="btn dayopen" data-spot="' + esc(sp.id) + '" data-key="' + esc(r.key) + '">' +
+        'Open ' + esc(dayLabel(d.date)) + ' at ' + esc(sp.name) + '</button>' +
+    '</div>' +
+  '</details>';
 }
 
 /* ═══════════════════════════════ state ═══════════════════════════════ */
@@ -1116,6 +1274,26 @@ function windLabel(sc, spot) {
   var word = sc.wind < 4 ? "glassy" : d < 50 ? "offshore" : d < 78 ? "cross-off" : d < 112 ? "cross-shore" : d < 140 ? "cross-on" : "onshore";
   return Math.round(sc.wind) + " kn " + compass(sc.windDir) + " · " + word;
 }
+function cloudWord(sc) {
+  if (sc.rain != null && sc.rain > 0.4) return "raining";
+  if (sc.cloud == null) return "—";
+  return sc.cloud < 15 ? "clear" : sc.cloud < 45 ? "mostly sunny"
+       : sc.cloud < 75 ? "part cloud" : "overcast";
+}
+function visWord(sc) {
+  if (sc.vis == null) return "—";
+  var km = sc.vis / 1000;
+  return km >= 10 ? "clear" : km >= 4 ? "hazy" : km >= 1 ? "poor" : "fog";
+}
+/* Pressure is not about today — it is the tell for what is coming. A low
+   deepening out in the Atlantic arrives here as swell a few days later. */
+function pressureWord(sc) {
+  if (sc.pressure == null) return "";
+  if (sc.pressure < 1005) return "low — unsettled, swell on the way";
+  if (sc.pressure > 1022) return "high — settled and probably small";
+  return "ordinary";
+}
+
 function tideLabel(st) {
   var t = st.t;
   var w = t < 0.2 ? "low" : t < 0.42 ? "low–mid" : t < 0.58 ? "mid" : t < 0.8 ? "mid–high" : "high";
@@ -1188,7 +1366,15 @@ function renderNow() {
       stat("Tide", tideLabel(sc.tide), nx.length
         ? nx.map(function (t) { return t.type + " " + t.at + " (" + (t.m >= 0 ? "+" : "") + r1(t.m) + " m)"; }).join(" · ")
         : r1(sc.tide.m) + " m") +
-      stat("Air", sc.airT == null ? "—" : Math.round(sc.airT) + " °C", (sc.uv != null ? "UV " + Math.round(sc.uv) : "") + (sc.rainP ? " · " + sc.rainP + "% rain" : "")) +
+      stat("Air", sc.airT == null ? "—" : Math.round(sc.airT) + " °C",
+        (sc.feelsT != null ? "feels like " + Math.round(sc.feelsT) + " °C" : "") +
+        (sc.uv != null ? " · UV " + Math.round(sc.uv) : "")) +
+      stat("Sky", cloudWord(sc), (sc.rainP ? sc.rainP + "% chance of rain" : "no rain expected")) +
+      stat("Visibility", visWord(sc), sc.vis == null ? "" : Math.round(sc.vis / 1000) + " km — matters at dawn") +
+      stat("Current", sc.curV == null ? "—" : r1(sc.curV) + " m/s",
+        sc.curV == null ? "" : (sc.curV < 0.25 ? "you will not feel it" : "it will drift you along the beach") +
+          (sc.curDir != null ? ", setting " + compass(sc.curDir) : "")) +
+      stat("Pressure", sc.pressure == null ? "—" : Math.round(sc.pressure) + " hPa", pressureWord(sc)) +
       stat("Daylight", hhmm(Math.floor(sc.sun.up / 60)) + "–" + hhmm(Math.floor(sc.sun.down / 60)), sc.dark ? "dark right now" : "") +
     '</div>' +
     '<div class="dialrow">' + compassSVG(sc, spot) +
@@ -1308,16 +1494,7 @@ function renderNow() {
       ? "Pick of the week is <b>" + esc(dayLabel(top.date)) + "</b> at " + esc(top.best.entry.spot.name) +
         ". The score is the best single hour; the time range beside it is how long the day stays near that."
       : "Nothing outstanding in the next " + DAYS + " days — so these are the least-bad hours of each day, which is the thing worth knowing on a flat week.") + '</p>' +
-    '<div class="wins">' + week.map(function (d) {
-      if (d.empty) return '<div class="win win-none"><span class="win-main"><b>' + dayLabel(d.date) + '</b><span>no data</span></span></div>';
-      var r = d.best.row, sp = d.best.entry.spot, col = scoreCell(r.score);
-      var range = d.run.from === d.run.to ? hhmm(d.run.from) : hhmm(d.run.from) + "–" + hhmm(d.run.to + 1);
-      return '<button class="win' + (r.score >= S.bar ? " win-hit" : "") + '" data-spot="' + esc(sp.id) + '" data-key="' + esc(r.key) + '">' +
-        '<span class="win-score" style="background:' + col.bg + ';color:' + col.ink + '">' + r.score + '</span>' +
-        '<span class="win-main"><b>' + dayLabel(d.date) + ' · ' + range + '</b>' +
-        '<span>' + esc(sp.name) + ' · peak ' + hhmm(r.hour) + ' · ' + mtr(r.localHs) + ' · ' + esc(windLabel(r, sp)) + '</span></span>' +
-        '<span class="win-tag">' + band(r.score).word + '<em class="c' + d.conf.level + '">' + d.conf.label.toLowerCase() + '</em></span></button>';
-    }).join("") + '</div>';
+    '<div class="days">' + week.map(dayRowHtml).join("") + '</div>';
   host.appendChild(nb);
 
   $("#barSel").addEventListener("change", function () {
@@ -1326,7 +1503,7 @@ function renderNow() {
     render();
   });
 
-  $$(".win[data-spot]", nb).forEach(function (btn) {
+  $$(".dayopen", nb).forEach(function (btn) {
     btn.addEventListener("click", function () {
       S.spotId = btn.getAttribute("data-spot");
       S.sel = { key: btn.getAttribute("data-key") };
@@ -2160,9 +2337,28 @@ function renderSpots() {
     '<div class="chips filters">' + FILTER_CHIPS.map(function (f) {
       return '<button class="chip fchip' + (S.filters[f.id] ? " on" : "") + '" data-f="' + f.id + '" ' +
         'aria-pressed="' + (S.filters[f.id] ? "true" : "false") + '" title="' + esc(f.why) + '">' + esc(f.label) + '</button>';
-    }).join("") + '</div>';
+    }).join("") +
+      '<button class="chip fchip' + (S.sortBy === "near" ? " on" : "") + '" id="nearBtn" ' +
+        'title="Sort by how far each beach is from where you are standing">' +
+        (S.me ? "Nearest to me" : "Find nearest to me") + '</button>' +
+    '</div>';
   host.appendChild(head);
-  $$(".fchip", head).forEach(function (c) {
+
+  $("#nearBtn").addEventListener("click", function () {
+    var btn = this;
+    if (S.me) { S.sortBy = S.sortBy === "near" ? "score" : "near"; render(); return; }
+    if (!navigator.geolocation) { btn.textContent = "no location on this device"; return; }
+    btn.textContent = "finding you…";
+    navigator.geolocation.getCurrentPosition(function (p) {
+      S.me = { lat: p.coords.latitude, lon: p.coords.longitude };
+      S.sortBy = "near";
+      render();
+    }, function () {
+      btn.textContent = "location refused";
+    }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+  });
+
+  $$(".fchip[data-f]", head).forEach(function (c) {
     c.addEventListener("click", function () {
       var id = c.getAttribute("data-f");
       S.filters[id] = !S.filters[id];
@@ -2181,13 +2377,33 @@ function renderSpots() {
   var list = spotsInRange()
     .filter(function (e) { return passesFilters(e.spot, pk.date, pk.hour); })
     .map(function (e) { return { e: e, r: rowAt(e, key) }; })
-    .filter(function (x) { return x.r; })
-    .sort(function (a, b) { return b.r.score - a.r.score; });
+    .filter(function (x) { return x.r; });
+
+  if (S.sortBy === "near" && S.me) {
+    list.sort(function (a, b) {
+      return (distanceFromMe(a.e.spot) || 1e9) - (distanceFromMe(b.e.spot) || 1e9);
+    });
+  } else {
+    list.sort(function (a, b) { return b.r.score - a.r.score; });
+  }
+
+  if (S.me && list.length) {
+    var near = list.slice().sort(function (a, b) {
+      return (distanceFromMe(a.e.spot) || 1e9) - (distanceFromMe(b.e.spot) || 1e9);
+    })[0];
+    var nkm = distanceFromMe(near.e.spot);
+    var note = el("section", "card nearcard");
+    note.innerHTML = '<h3>Closest to you</h3>' +
+      '<p><b>' + esc(near.e.spot.name) + '</b> — ' +
+      (nkm < 10 ? r1(nkm) : Math.round(nkm)) + ' km away, scoring <b>' + near.r.score + '</b>/100 right now' +
+      (near.r.score < 35 ? '. Closest is not the same as best — the ranked list below is by score.' : '.') + '</p>';
+    host.appendChild(note);
+  }
 
   if (!list.length) {
     host.appendChild(el("p", "empty", "No beach passes all of those filters at this hour. Turn one off."));
   }
-  list.forEach(function (x) { host.appendChild(spotCard(x.e.spot, x.r)); });
+  list.forEach(function (x) { host.appendChild(spotCard(x.e, x.r)); });
 
   var hidden = S.model.spots.length - list.length;
   if (hidden > 0) {
@@ -2201,20 +2417,31 @@ var BBTAG = {
   seasonal: { t: "Summer zone rule", c: "warn" }
 };
 
-function spotCard(spot, sc) {
+function spotCard(entry, sc) {
+  var spot = entry.spot;
   var b = band(sc.score), col = scoreCell(sc.score);
   var tag = BBTAG[spot.bb.status] || BBTAG.open;
   var card = el("section", "card spot");
   var mapsTo = function (la, lo) {
     return "https://www.google.com/maps/dir/?api=1&destination=" + la + "," + lo + "&travelmode=driving";
   };
+  var km = distanceFromMe(spot);
+  var best = bestWindowForSpot(entry);
+
   card.innerHTML =
     '<div class="spot-head">' +
       '<span class="spot-score" style="background:' + col.bg + ';color:' + col.ink + '">' + sc.score + '</span>' +
       '<div class="spot-id"><h3>' + esc(spot.name) + '</h3>' +
-        '<p class="sub">' + esc(spot.town) + ' · ' + spot.drive + ' min · ' + esc(spot.type) + ' · ' + esc(spot.level) + '</p></div>' +
+        '<p class="sub">' + esc(spot.town) + ' · ' + spot.drive + ' min from Rota' +
+        (km != null ? ' · <b>' + (km < 10 ? r1(km) : Math.round(km)) + ' km from you</b>' : '') +
+        ' · ' + esc(spot.type) + ' · ' + esc(spot.level) + '</p></div>' +
       '<span class="bb bb-' + tag.c + '">' + tag.t + '</span>' +
     '</div>' +
+    (best
+      ? '<p class="spot-best"><b>Best in the next ' + DAYS + ' days:</b> ' + esc(dayLabel(best.date)) + ' ' +
+        hhmm(best.from) + '–' + hhmm(best.to + 1) + ' · <b>' + best.peak.score + '</b>/100 · ' +
+        esc(band(best.peak.score).word.toLowerCase()) + '</p>'
+      : '<p class="spot-best spot-best-none">Nothing rideable here in the next ' + DAYS + ' days.</p>') +
     '<p class="spot-now">' + mtr(sc.localHs) + ' · ' + (sc.tp == null ? "—" : Math.round(sc.tp) + ' s') +
       ' · ' + esc(windLabel(sc, spot)) + ' · tide ' + esc(tideLabel(sc.tide)) + ' · <b>' + b.word + '</b></p>' +
     '<details><summary>Parking, rules, hazards</summary>' +
@@ -2301,6 +2528,100 @@ function renderLive() {
   host.appendChild(src);
 }
 
+/* ════════════════════════════ view: GUIDE ════════════════════════════
+   Everything on this site is a number with a reason behind it, and none of
+   that is obvious from looking at it. This tab says what each thing is, what
+   the flags on the beach mean, and what to actually do with the site.      */
+
+function renderGuide() {
+  var host = $("#v-guide"); host.innerHTML = "";
+
+  /* — how to use it — */
+  var how = el("section", "card");
+  how.innerHTML = '<h3>How to use this</h3>' +
+    '<p class="foot">Four ways in, depending on how much you want to think about it.</p>' +
+    '<ol class="steps">' + (window.__SURF_HOWTO__ || []).map(function (h) {
+      return '<li><b>' + esc(h.t) + '</b><p>' + esc(h.d) + '</p></li>';
+    }).join("") + '</ol>';
+  host.appendChild(how);
+
+  /* — the flags — */
+  var flags = el("section", "card");
+  flags.innerHTML = '<h3>The flags on the beach</h3>' +
+    '<p class="foot">These are the Spanish national colours, flown at lifeguarded beaches in season. ' +
+    'They beat everything on this site: a forecast is a guess about the sea, a flag is a person ' +
+    'standing on it looking at it.</p>' +
+    '<div class="flags">' + (window.__SURF_FLAGS__ || []).map(function (f) {
+      return '<div class="flagrow">' +
+        '<span class="flagchip" style="background:' + f.hex + '"' +
+          (f.c === "none" ? ' data-none="1"' : '') + ' aria-hidden="true"></span>' +
+        '<div><b>' + esc(f.name) + '</b><span class="flagshort">' + esc(f.short) + '</span>' +
+        '<p>' + esc(f.d) + '</p></div></div>';
+    }).join("") + '</div>' +
+    '<p class="foot">Red means out of the water, board included, and it is fined. If a lifeguarded ' +
+    'beach is red but the surf is genuinely good, that is the day to drive to one with no tower.</p>';
+  host.appendChild(flags);
+
+  /* — what every number means — */
+  var groups = [];
+  (window.__SURF_GLOSSARY__ || []).forEach(function (g) {
+    var row = groups.filter(function (x) { return x.name === g.g; })[0];
+    if (!row) { row = { name: g.g, items: [] }; groups.push(row); }
+    row.items.push(g);
+  });
+  var gloss = el("section", "card");
+  gloss.innerHTML = '<h3>What every number means</h3>' +
+    '<p class="foot">Tap a heading. Each one says what the thing is, why it matters on a bodyboard, ' +
+    'and what a good value looks like on this coast.</p>' +
+    groups.map(function (grp) {
+      return '<div class="gterms"><span class="lbl">' + esc(grp.name) + '</span>' +
+        grp.items.map(function (it) {
+          return '<details class="gterm"><summary>' + esc(it.t) + '</summary>' +
+            '<p>' + esc(it.what) + '</p>' +
+            '<p class="gwhy"><b>Why it matters:</b> ' + esc(it.why) + '</p>' +
+            '<p class="ggood"><b>Good looks like:</b> ' + esc(it.good) + '</p></details>';
+        }).join("") + '</div>';
+    }).join("");
+  host.appendChild(gloss);
+
+  /* — the score, spelled out — */
+  var sc = el("section", "card");
+  sc.innerHTML = '<h3>How the score is worked out</h3>' +
+    '<p class="foot">Five things, weighted for a bodyboard rather than a surfboard — a sponge wants a ' +
+    'steeper, punchier, shallower wave, is happy at half the size a longboard needs, and likes the ' +
+    'low-tide shorebreak a surfer would call a closeout.</p>' +
+    '<div class="bars">' +
+      bar("Size", 30, "how close to this beach's own sweet spot, not how big in absolute terms") +
+      bar("Wind", 24, "offshore holds the wave up, onshore flattens it — the biggest single factor") +
+      bar("Period", 16, "long period is a distant storm and has power; short is local chop") +
+      bar("Tide", 15, "matched to the tide this particular beach works on") +
+      bar("Direction", 15, "whether the swell angle actually gets past the headlands to this beach") +
+    '</div>' +
+    '<p class="foot">Then penalties scale it down for squally gusts, rain and short-period slop, and ' +
+    'anything under about 0.3 m is called flat however good the rest looks.</p>' +
+    '<div class="bandkey">' + BANDS.slice().reverse().map(function (b) {
+      return '<div><span class="bandchip" style="background:' + scoreCell(Math.max(b.min, 0) + 8).bg + '"></span>' +
+        '<b>' + esc(b.word) + '</b> <em>' + (b.min < 0 ? "under 14" : b.min + "+") + '</em>' +
+        '<p>' + esc(b.d) + '</p></div>';
+    }).join("") + '</div>';
+  host.appendChild(sc);
+
+  /* — where the numbers come from — */
+  var src = el("section", "card");
+  src.innerHTML = '<h3>Where it all comes from</h3>' +
+    '<p>Four independent weather models from four agencies — ECMWF, Météo-France, NOAA and DWD — ' +
+    'read ten days ahead for all ' + SPOTS.length + ' beaches at once. Nothing here needs an account ' +
+    'or a key.</p>' +
+    '<p class="foot">The headline figure is the best-match blend. The others are what the confidence ' +
+    'badge measures: when they disagree, you are told so instead of being handed false precision. ' +
+    'The local knowledge — which tide a beach wants, where the car park is, where the stone fish ' +
+    'traps lie at Candor — is written into the site, not forecast. The Live check is the one part ' +
+    'that goes and reads the web for what is true today.</p>' +
+    '<p class="foot">Forecasts are forecasts. Look at the sea before you paddle out, and never ' +
+    'argue with a red flag.</p>';
+  host.appendChild(src);
+}
+
 /* ════════════════════════════ chrome + boot ════════════════════════════ */
 
 function renderHeader() {
@@ -2350,6 +2671,7 @@ function render() {
   else if (S.view === "grid") renderGrid();
   else if (S.view === "spots") renderSpots();
   else if (S.view === "live") renderLive();
+  else if (S.view === "guide") renderGuide();
 }
 
 function showError(msg) {

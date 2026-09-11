@@ -438,3 +438,126 @@ window.__SURF_LORE__ = [
     t: "South wind",
     d: "Cross-onshore and usually means weather coming. Cádiz's own beaches handle it better than the beaches further north." }
 ];
+
+/* ── the flags on the beach ──────────────────────────────────────────────
+   These are the Spanish national colours, flown at lifeguarded beaches
+   during the season. They override everything on this site: a forecast is a
+   guess about the sea, a flag is a person standing on it looking at it. */
+window.__SURF_FLAGS__ = [
+  { c: "green", hex: "#2F8F4E", name: "Green · verde", short: "Swim and ride",
+    d: "Conditions are fine. Normal rules still apply, which in season means keeping a board out of the buoyed swimming zone while the towers are staffed." },
+  { c: "yellow", hex: "#E3B317", name: "Yellow · amarilla", short: "Care needed",
+    d: "Something is off — size, current, or wind. You may go in, but stay inside your depth and inside your ability. Most good bodyboarding days on this coast fly yellow, because what makes a wave fun is also what makes the lifeguard cautious." },
+  { c: "red", hex: "#C0392B", name: "Red · roja", short: "Out of the water",
+    d: "Bathing is prohibited, and that includes you on a board. It is an ordinance, not advice, and it is fined. On a big clean swell a lifeguarded beach can fly red while the surf is excellent — that is the day to drive to a beach with no tower, like Cortadura, Candor or El Palmar, where the rule does not apply and the judgement is yours." },
+  { c: "purple", hex: "#7D4C9E", name: "Purple · morada", short: "Something in the water",
+    d: "Dangerous marine life, flown alongside the colour flag. On this coast it usually means medusas (jellyfish), sometimes carabela portuguesa (Portuguese man-of-war, a serious sting) or pez araña (weeverfish, buried in the sand in the shallows — it is why you shuffle your feet). A wetsuit and fins cover most of you; your hands and face are what get stung." },
+  { c: "none", hex: "#8FA6B2", name: "No flag at all", short: "Nobody is watching",
+    d: "Out of season, or before and after tower hours, there is no flag and no lifeguard. This is the normal state of this coast from mid-September to mid-June — which is also when the surf is best. It is not a warning, it just means the decision is entirely yours." },
+  { c: "blue", hex: "#1F6FB2", name: "Blue Flag · bandera azul", short: "Not a safety flag",
+    d: "An environmental and facilities award for the beach — water quality, cleaning, access, services. It says nothing at all about whether it is safe to go in today. People mix this one up constantly." }
+];
+
+/* ── every number on this site, in plain words ───────────────────────────
+   what: what the thing actually is
+   why:  why a bodyboarder should care
+   good: what a good value looks like here, on this coast */
+window.__SURF_GLOSSARY__ = [
+  { g: "The basics", t: "The score out of 100",
+    what: "One number combining size, wind, swell direction, period and tide for that beach at that hour, weighted for a bodyboard rather than a surfboard.",
+    why: "It lets you compare seventeen beaches and 240 hours at a glance instead of reading five numbers each time.",
+    good: "Over 60 is worth driving for. Over 78 is as good as this coast gets. Under 30 is a swim with a board." },
+  { g: "The basics", t: "Wave height — “at the beach” and “offshore”",
+    what: "Offshore is what the models say out in open water. At the beach is that figure after this particular beach's headlands, angle and shelter have had their way with it.",
+    why: "Rota's beaches sit behind a shelf and get a fraction of what El Palmar gets from the same swell. Comparing offshore numbers between beaches tells you nothing; the at-the-beach figure is the one to use.",
+    good: "0.8–1.5 m at the beach is the sweet spot for most of these spots." },
+  { g: "The basics", t: "Period (seconds)",
+    what: "The gap in time between one wave crest and the next.",
+    why: "It is the difference between a wave with power and a wave with none. Long-period swell was made by a distant storm and arrives organised; short-period is local wind chop that just looks like waves on a chart.",
+    good: "Under 7 s is slop. 8–10 s works. Over 11 s is proper groundswell and everything improves." },
+  { g: "The basics", t: "Groundswell vs wind chop",
+    what: "The total sea state is both added together. This site splits them apart.",
+    why: "A day can read 0.8 m and be almost entirely chop — the height number flatters it. If the chop bar is bigger than the swell bar, do not bother.",
+    good: "You want the groundswell bar to be the long one." },
+
+  { g: "Wind", t: "Offshore, cross-shore, onshore",
+    what: "Which way the wind blows relative to the beach. Offshore blows from the land out to sea; onshore blows in off the water.",
+    why: "Offshore holds the wave face up and smooth. Onshore flattens it into mush. It is the single biggest difference between a good session and a wasted drive.",
+    good: "Offshore and under about 15 kn. Under 5 kn from any direction is glassy and fine." },
+  { g: "Wind", t: "Levante and Poniente",
+    what: "The two winds that run this coast. Levante is the easterly; Poniente is the westerly.",
+    why: "Levante blows offshore on every west-facing beach from Rota to Conil, so it grooms them. Poniente is onshore and ruins them.",
+    good: "Light Levante. And when Poniente is blowing hard, Los Caños de Meca faces south behind Cape Trafalgar and is offshore in exactly that wind — that inversion is the most useful local fact on this page." },
+  { g: "Wind", t: "Gusts",
+    what: "The strongest short bursts, as opposed to the steady average.",
+    why: "A 12 kn wind gusting 30 is not a 12 kn day. Gusts are what knock the top off a wave just as you drop in.",
+    good: "Gusts within about 8 kn of the average means a steady day." },
+
+  { g: "Tide", t: "Low, mid, high — and rising or falling",
+    what: "Where the water sits between this tide's own low and high, and which way it is heading.",
+    why: "Every beach has a state it prefers. A bank that throws a perfect wedge at low tide can be a lifeless slope at high, and a reef that is fun at high tide is dry rock at low.",
+    good: "Match it to the beach — each spot card says which tide it likes." },
+  { g: "Tide", t: "Tide times and range",
+    what: "The clock time of each high and low, and how much water moves between them.",
+    why: "It tells you when your window actually is. The range matters too: a big range means faster-moving water and stronger rips.",
+    good: "On this coast the range swings between about 0.6 m and 3 m across a fortnight." },
+  { g: "Tide", t: "Spring and neap tides",
+    what: "Springs are the big-range tides around the new and full moon; neaps are the small-range ones around the half moons. Nothing to do with the season.",
+    why: "Springs uncover more bank at low water and move more water, so the surf changes faster through the session and the rips are stronger.",
+    good: "Neaps are more forgiving. Springs give you a better low tide if the bank needs it." },
+
+  { g: "The sea", t: "Rip current",
+    what: "Water the waves pushed up the beach, escaping back out through a channel.",
+    why: "It is the thing that actually hurts people here. It pulls you out, not under.",
+    good: "If you are caught: do not swim against it. Go sideways along the beach until you are out of it, then come in. On a board you are already floating, which is most of the battle." },
+  { g: "The sea", t: "Shorebreak",
+    what: "Waves breaking straight onto the sand in very shallow water.",
+    why: "Surfers avoid it; on a sponge it is the point — it is where the steep, fast, hollow rides are. It is also where necks get hurt, so keep your arms in front of you.",
+    good: "Low tide on a steep bank." },
+  { g: "The sea", t: "Ocean current",
+    what: "The steady drift of the water itself, separate from any rip.",
+    why: "It is why you keep ending up fifty metres down the beach from where you parked.",
+    good: "Under about 0.3 m/s you will not notice it." },
+  { g: "The sea", t: "Water temperature",
+    what: "Sea surface temperature where the models sample it, just offshore.",
+    why: "It picks your wetsuit. On a bodyboard you are lying in the water and moving less than a surfer, so you run about half a step colder than a surf chart would tell you.",
+    good: "Rota swings from about 15 °C in February to 23 °C in August." },
+
+  { g: "Air and light", t: "First light and last light",
+    what: "Civil twilight — enough light to see the sea, about half an hour before sunrise and after sunset.",
+    why: "In summer it is the whole plan: get in at first light and be out before the lifeguard towers open at 11:00, when boards are no longer allowed in the buoyed zone.",
+    good: "The day timeline card shows the light, the tower hours and the good hours stacked on one bar." },
+  { g: "Air and light", t: "Feels like",
+    what: "Air temperature adjusted for wind and humidity.",
+    why: "It is the number that decides whether the walk back to the car in a wet suit is fine or miserable.",
+    good: "Watch it on windy days — 18 °C in 20 kn feels a lot colder." },
+  { g: "Air and light", t: "Visibility",
+    what: "How far you can see.",
+    why: "Dawn fog is real on this coast and it is the one thing that can cancel an early session after you have already driven an hour.",
+    good: "Over 10 km is clear. Under 2 km at dawn means you may not be able to see the sets coming." },
+  { g: "Air and light", t: "Pressure",
+    what: "Air pressure at sea level.",
+    why: "Not about today — it is the tell for what is coming. Falling pressure means a low is deepening out in the Atlantic, and a few days later that arrives here as swell.",
+    good: "Falling fast is good news for next week, bad news for this afternoon." },
+  { g: "Air and light", t: "UV index",
+    what: "Sunburn strength.",
+    why: "You are lying face-down and stationary for two hours. The backs of the legs and the ears always burn.",
+    good: "Over 6, wear sunscreen. Andalucían sun is not a joke." },
+
+  { g: "Trust", t: "Confidence",
+    what: "How far apart the independent weather models are for that hour. Three agencies forecast the waves and three forecast the wind; when they disagree, so does the score.",
+    why: "A forecast five days out is a plan, not a call. This tells you which it is.",
+    good: "High confidence within two or three days. Anything past a week, check again the morning before." }
+];
+
+/* ── the four things to do with this site ─────────────────────────────── */
+window.__SURF_HOWTO__ = [
+  { n: 1, t: "Just want an answer? Press one button.",
+    d: "On the Now tab, “Plan my session” picks the best beach and hour in the next ten days and tells you why that one, what time to leave the house, where to park and what to bring. It only ever suggests hours you are legally allowed to ride in." },
+  { n: 2, t: "Want to pick your day? Read the grid.",
+    d: "The Grid tab is ten days down and every hour across, coloured by how good it is. Darker is better. Tap any square to jump to that exact hour at that exact beach. Hatched squares are night." },
+  { n: 3, t: "Want to choose a beach? Use the map.",
+    d: "The Spots tab ranks all seventeen beaches for the hour you are looking at, and pins them on a satellite map with their scores. Each one lists its best window, where to leave the car, and what to watch out for. Tap “nearest to me” to sort by how far they are from where you are standing." },
+  { n: 4, t: "About to drive? Read the live check.",
+    d: "Near the bottom of the Now tab, the Live check card asks Claude to search the web for the things no weather model knows: is the water clean, are there jellyfish, what are the flags doing today, is the car park dug up, has the sandbank moved. It runs on its own — there is nothing to set up." }
+];
