@@ -2231,6 +2231,15 @@ function registerSW() {
   if (!("serviceWorker" in navigator)) return;
   var secure = location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
   if (!secure) return;
+  /* A worker that takes over mid-session may be serving different files from
+     the ones this page loaded. Reload once, and only once, so the page and
+     its assets always agree. */
+  var reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", function () {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  });
   navigator.serviceWorker.register("./sw.js").catch(function () { /* offline shell is a bonus, not a requirement */ });
 }
 

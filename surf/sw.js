@@ -8,7 +8,7 @@
    copy in localStorage and knows how to label it as stale, which is more
    honest than replaying an old HTTP response as if it were fresh. */
 
-var CACHE = "rota-wave-v1";
+var CACHE = "rota-wave-v2";
 var SHELL = [
   "./", "./index.html", "./app.js", "./data.js",
   "./manifest.webmanifest", "./icon-192.png"
@@ -52,8 +52,18 @@ self.addEventListener("fetch", function (e) {
   /* Let the forecast APIs and the map tiles go straight to the network. */
   if (!cacheable(url)) return;
 
+  /* Going to the network is not enough on its own: the browser's own HTTP
+     cache sits behind fetch(), and GitHub Pages serves assets with
+     max-age=600, so "network-first" would still hand back code up to ten
+     minutes old. Same-origin app files are therefore revalidated against the
+     server every time. The CDN files are versioned in their URLs and can be
+     taken from the HTTP cache as normal. */
+  var hit = url.origin === self.location.origin
+    ? new Request(req.url, { cache: "no-cache", credentials: "same-origin", mode: "same-origin" })
+    : req;
+
   e.respondWith(
-    fetch(req).then(function (res) {
+    fetch(hit).then(function (res) {
       if (res && (res.ok || res.type === "opaque")) {
         var copy = res.clone();
         caches.open(CACHE).then(function (c) { c.put(req, copy); }).catch(function () {});
