@@ -8,11 +8,10 @@
    copy in localStorage and knows how to label it as stale, which is more
    honest than replaying an old HTTP response as if it were fresh. */
 
-var CACHE = "rota-wave-v2";
-var SHELL = [
-  "./", "./index.html", "./app.js", "./data.js",
-  "./manifest.webmanifest", "./icon-192.png"
-];
+var CACHE = "rota-wave-v3";
+/* The scripts carry a ?v= build stamp, so they are cached on first use rather
+   than precached under a bare name that nothing will ever request. */
+var SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png"];
 
 self.addEventListener("install", function (e) {
   e.waitUntil(

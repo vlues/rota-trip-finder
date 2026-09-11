@@ -2467,6 +2467,34 @@ window.addEventListener("beforeinstallprompt", function (e) {
 });
 window.addEventListener("appinstalled", function () { deferredInstall = null; });
 
+/* ── build freshness ───────────────────────────────────────────────────
+   GitHub Pages serves assets with max-age=600, so for ten minutes after a
+   deploy a visitor can be handed the new HTML with the old JS — and a phone
+   that has added this to its home screen can sit on an old build far longer.
+   The page therefore asks the server what the current build is and reloads
+   itself once if it is behind. Same trick as the resume tailor. */
+function checkBuild() {
+  var meta = document.querySelector('meta[name="app-version"]');
+  var mine = meta ? meta.getAttribute("content") : null;
+  if (!mine || mine === "dev") return;
+  fetch("./version.json?t=" + Date.now(), { cache: "no-store" })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d || !d.v || d.v === mine) return;
+      var once = "rotasurf.reloadedFor";
+      var already = null;
+      try { already = sessionStorage.getItem(once); } catch (e) {}
+      if (already === d.v) return;                 /* never loop */
+      try { sessionStorage.setItem(once, d.v); } catch (e) {}
+      if ("caches" in window) {
+        caches.keys().then(function (ks) {
+          return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+        }).catch(function () {}).then(function () { location.reload(); });
+      } else { location.reload(); }
+    })
+    .catch(function () { /* offline: keep what we have */ });
+}
+
 function registerSW() {
   if (!("serviceWorker" in navigator)) return;
   var secure = location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
@@ -2532,6 +2560,7 @@ document.addEventListener("DOMContentLoaded", function () {
   } catch (e) {}
 
   registerSW();
+  checkBuild();
   readHash();
   window.addEventListener("hashchange", function () {
     var before = S.spotId + "|" + (S.sel && S.sel.key);
@@ -2544,6 +2573,7 @@ document.addEventListener("DOMContentLoaded", function () {
   /* Keep it honest if the phone sits in a pocket for an hour. */
   document.addEventListener("visibilitychange", function () {
     if (document.hidden || !S.model) return;
+    checkBuild();
     if (Date.now() - S.model.at > CACHE_MAX_AGE) boot();
     else render();
   });
