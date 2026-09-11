@@ -1856,11 +1856,33 @@ function leaveAt(spot, hour) {
 var INTEL_KEY = "rotasurf.intel.v1";
 var INTEL_TTL = 6 * 3600 * 1000;          /* matches the Worker's own cache */
 
+/* A stored endpoint is only usable if it is actually an http(s) URL. An
+   earlier version of this page had a settings box, and anything typed into
+   the wrong field there — an access code, a half-pasted address — would be
+   saved and then used as the endpoint, which fails in a way that looks like
+   the site being broken. Anything that is not a URL is ignored in favour of
+   the one config.js ships, and cleared so it cannot come back. */
+function usableEndpoint(v) {
+  if (!v) return "";
+  try {
+    var u = new URL(String(v));
+    return (u.protocol === "https:" || u.protocol === "http:") ? String(v) : "";
+  } catch (e) { return ""; }
+}
+
 function cfg() {
   var c = {};
   try { c = JSON.parse(localStorage.getItem("rtf.cfg")) || {}; } catch (e) {}
+  var stored = usableEndpoint(c.api);
+  if (c.api && !stored) {
+    /* Drop the junk so this heals on first load rather than every load. */
+    try {
+      localStorage.setItem("rtf.cfg", JSON.stringify({ api: "", code: c.code || "" }));
+    } catch (e) { /* private mode */ }
+  }
+  var built = (window.TRIP_CONFIG && window.TRIP_CONFIG.API_BASE) || "";
   return {
-    api: String(c.api || (window.TRIP_CONFIG && window.TRIP_CONFIG.API_BASE) || "").replace(/\/+$/, ""),
+    api: String(stored || built || "").replace(/\/+$/, ""),
     code: c.code || ""
   };
 }
@@ -1918,15 +1940,13 @@ function renderIntelCard(host, spot, sc) {
   var head = '<div class="plan-head"><h3>Live check · ' + esc(spot.name) + '</h3></div>';
 
   if (!c.api) {
-    /* Only reachable in a fork with no Worker configured — config.js carries
-       the URL for this site. */
+    /* Only reachable in a fork whose config.js has no API_BASE. There is
+       deliberately nothing to fill in here: a settings box that stores a
+       wrong value is worse than no settings box at all. */
     card.innerHTML = head +
-      '<p class="foot">The rest of this page needs no key and never will. This one card asks Claude to ' +
-      'search the web for what the models cannot know at this beach. It needs the Cloudflare Worker that ' +
-      'already powers Hike Finder and Range Rings on this site.</p>' +
-      '<div class="shrow"><button class="btn" id="intelSetup">Point it at my Worker</button></div>';
+      '<p class="foot">Live check is switched off in this copy of the site — <code>config.js</code> has no ' +
+      '<code>API_BASE</code>. Everything else on this page works without it and always will.</p>';
     host.appendChild(card);
-    $("#intelSetup").addEventListener("click", openCfgDialog);
     return;
   }
 
@@ -2006,14 +2026,6 @@ function askIntel(card, spot, sc) {
       '<div class="shrow"><button class="btn" id="intelGo">Try again</button></div>';
     $("#intelGo").addEventListener("click", function () { askIntel(card, spot, sc); });
   });
-}
-
-function openCfgDialog() {
-  var c = cfg();
-  $("#cfgApi").value = c.api;
-  $("#cfgCode").value = c.code;
-  $("#cfg").hidden = false;
-  $("#cfgApi").focus();
 }
 
 /* ═══════════════════════ deep links + the map ═══════════════════════ */
@@ -2435,26 +2447,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     render();
   });
-  /* live-check settings dialog */
-  $("#cfgClose").addEventListener("click", function () { $("#cfg").hidden = true; });
-  $("#cfgSave").addEventListener("click", function () {
-    try {
-      localStorage.setItem("rtf.cfg", JSON.stringify({
-        api: $("#cfgApi").value.trim().replace(/\/+$/, ""),
-        code: $("#cfgCode").value.trim()
-      }));
-    } catch (e) { /* private mode — the setting simply will not stick */ }
-    $("#cfg").hidden = true;
-    /* Saving settings should visibly do something: forget this session's
-       attempts so the live check runs again against the new endpoint. */
-    intelTried = {};
-    render();
-  });
-  $("#cfg").addEventListener("click", function (e) { if (e.target === $("#cfg")) $("#cfg").hidden = true; });
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !$("#cfg").hidden) $("#cfg").hidden = true;
-  });
-
   var th = $("#themeBtn");
   if (th) th.addEventListener("click", function () {
     var cur = document.documentElement.getAttribute("data-theme");
