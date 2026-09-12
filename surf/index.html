@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#F2F7F9" media="(prefers-color-scheme:light)">
 <meta name="theme-color" content="#071620" media="(prefers-color-scheme:dark)">
 <title>Rota Wave Watch</title>
-<meta name="app-version" content="20260912084513">
+<meta name="app-version" content="20260912113146">
 <meta name="description" content="Live bodyboarding conditions for Rota and the Gulf of Cádiz — when to go, where to park, what to wear, and whether boards are allowed.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -90,6 +90,15 @@ header{position:sticky;top:0;z-index:50;background:var(--panel);border-bottom:1p
 .controls{flex-wrap:wrap}
 /* the beach picker gets its own line so the three selects never crush */
 #spotSel{flex:1 1 100%;order:-1}
+
+/* ───────────────────── learn card ───────────────────── */
+.learn{border-color:var(--good)}
+.learn-badge{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px;border-radius:8px;
+  min-width:34px;height:30px;display:grid;place-items:center;flex:0 0 auto}
+.learn .plan-hero{margin-top:10px}
+.learn .plan-hero b{font-family:Antonio,sans-serif;font-size:19px;font-weight:700;display:block;line-height:1.1}
+.learn .plan-hero span{display:block;font-size:12.5px;color:var(--ink-2)}
+.learn .plan-hero span+span{color:var(--muted);font-size:11.5px}
 
 /* ───────────────────── plan preferences ───────────────────── */
 .prefs{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;align-items:center}
@@ -561,9 +570,9 @@ details[open]>summary:before{content:"▾ "}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <!-- Shared, secret-free build config: carries the deployed Worker URL so Live
      check needs no per-device setup. Same file the other sub-apps use. -->
-<script src="../build-check.js?v=20260912084513"></script>
-<script src="../config.js?v=20260912084513"></script>
-<script src="./data.js?v=20260912084513"></script>
-<script src="./app.js?v=20260912084513"></script>
+<script src="../build-check.js?v=20260912113146"></script>
+<script src="../config.js?v=20260912113146"></script>
+<script src="./data.js?v=20260912113146"></script>
+<script src="./app.js?v=20260912113146"></script>
 </body>
 </html>

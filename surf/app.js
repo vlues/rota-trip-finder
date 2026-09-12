@@ -1442,6 +1442,7 @@ function confBadge(c) {
 function renderNow() {
   var host = $("#v-now"); host.innerHTML = "";
   renderPlanCard(host);
+  renderLearnCard(host);
   var pick = currentPick();
   if (!pick) { host.appendChild(el("p", "empty", "No forecast for this hour.")); return; }
   var sc = pick.row, spot = pick.entry.spot, b = band(sc.score);
@@ -1689,6 +1690,88 @@ function wirePrefs(card) {
     S.gear.fins = this.checked; save();
     if (S.plan) S.plan = recommend();
     render();
+  });
+}
+
+/* ── where to have a first go ───────────────────────────────────────── */
+function renderLearnCard(host) {
+  var lr = bestLearnToday();
+  var card = el("section", "card learn");
+
+  if (!lr) {
+    card.innerHTML = '<h3>Best place to learn today</h3>' +
+      '<p class="foot">Nothing within your drive limit is both legal and safe for a first go today. ' +
+      'Widen the drive, or wait — this coast gives you a beginner day most weeks.</p>';
+    host.appendChild(card);
+    return;
+  }
+
+  /* A flat sea is not a lesson. Say that, and point at the next day that is. */
+  if (lr.pick.L.score < 55) {
+    var nxt = nextLearnDay();
+    card.innerHTML = '<h3>Best place to learn today</h3>' +
+      '<p><b>Not today.</b> Nothing in range has enough water moving to learn on — the best you could do ' +
+      'is ' + esc(lr.pick.spot.name) + ' at ' + mtr(lr.pick.row.localHs) + ', which is a swim rather than a lesson.</p>' +
+      (nxt
+        ? '<div class="rule"><b>The next real chance</b><p>' + esc(dayLabel(nxt.date)) + ', ' +
+          hhmm(nxt.from) + '–' + hhmm(nxt.to + 1) + ' at <b>' + esc(nxt.pick.spot.name) + '</b> — ' +
+          mtr(nxt.pick.row.localHs) + ', ' + esc(windLabel(nxt.pick.row, nxt.pick.spot)) + '. ' +
+          esc(learnWhy(nxt)) + '</p></div>' +
+          '<div class="shrow"><button class="btn" id="learnOpen" data-spot="' + esc(nxt.pick.spot.id) +
+          '" data-key="' + esc(nxt.pick.row.key) + '">Open that day</button></div>'
+        : '<p class="foot">Nor is there one in the next ' + DAYS + ' days. That happens here in a flat spell.</p>');
+    host.appendChild(card);
+    var ob = $("#learnOpen");
+    if (ob) ob.addEventListener("click", function () {
+      S.spotId = ob.getAttribute("data-spot");
+      S.sel = { key: ob.getAttribute("data-key") };
+      render(); window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    return;
+  }
+
+  var pick = lr.pick, r = pick.row, spot = pick.spot;
+  var col = scoreSolid(pick.L.score);
+  var suit = suitFor(r.sst);
+  var law = boardRule(spot, lr.date, r.hour);
+
+  card.innerHTML =
+    '<div class="plan-head"><h3>Best place to learn today</h3>' +
+      '<span class="learn-badge" style="background:' + col.bg + ';color:' + col.ink + '">' +
+      pick.L.score + '</span></div>' +
+    '<p class="foot">Not the same question as “where is it best”. The main score likes a steep, punchy ' +
+    'wave; that is the one that holds a beginner under. This looks for small, sandy and slack instead.</p>' +
+    '<div class="plan-hero">' +
+      '<div><b>' + esc(spot.name) + '</b>' +
+        '<span>' + hhmm(lr.from) + '–' + hhmm(lr.to + 1) + ' · ' + esc(spot.town) +
+          ' · ' + driveMin(spot) + ' min from ' + esc(originLabel()) + '</span>' +
+        '<span>' + mtr(r.localHs) + ' · ' + esc(windLabel(r, spot)) + ' · water ' +
+          (r.sst == null ? "—" : r1(r.sst) + " °C") + '</span></div>' +
+    '</div>' +
+    '<div class="rule"><b>Why here</b><p>' + esc(learnWhy(lr)) +
+      (driveMin(spot) > 30 && lr.near && lr.near.score < pick.L.score - 12
+        ? ' Nothing closer is worth the trip: the best within twenty-five minutes is ' +
+          esc(lr.near.spot.name) + ', and it is ' +
+          (lr.near.row.localHs < 0.15 ? 'flat' : 'only ' + mtr(lr.near.row.localHs)) +
+          ' — nothing in the water to catch.'
+        : '') + '</p></div>' +
+    '<div class="rule"><b>What to actually do</b><p>' +
+      'Stay in the broken whitewater, in water you can stand up in. Point the board at the beach, ' +
+      'wait for the white water to reach you, kick hard as it picks you up and keep your weight forward. ' +
+      'Do not paddle out the back on day one — everything you need is in the first twenty metres.</p></div>' +
+    '<div class="rule"><b>Keep yourself safe</b><p>' +
+      'Shuffle your feet going in, for weeverfish. Keep your arms out in front of you when a wave breaks ' +
+      'on you, so the board and the sand never meet your face. Pick something on land and check it every ' +
+      'few minutes — if it has moved, you are in a current, so go sideways along the beach, not against it.' +
+      (law.restricted ? " " : "") + '</p></div>' +
+    '<div class="rule"><b>Wear and bring</b><p>' + esc(suit.suit) + '. Fins, a leash, and sunscreen — ' +
+      'you will be face-down and stationary for an hour and the backs of your legs will catch it.</p></div>' +
+    '<div class="shrow"><button class="btn" id="learnOpen">Open this beach</button></div>';
+
+  host.appendChild(card);
+  $("#learnOpen").addEventListener("click", function () {
+    S.spotId = spot.id; S.sel = { key: r.key }; render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
   });
 }
 
@@ -2711,6 +2794,138 @@ function renderSpots() {
     host.appendChild(el("p", "empty", list.length + " of " + S.model.spots.length +
       " beaches shown — " + hidden + " filtered out by the drive limit or the chips above."));
   }
+}
+
+/* ── where to learn ─────────────────────────────────────────────────────
+   Deliberately not the same question as "where is it best today". The main
+   score rewards a steep, punchy, low-tide shorebreak, which is exactly the
+   wave that holds a beginner under and breaks their nose. Learning wants the
+   opposite: small, sandy, slack water, and somewhere you can stand up.      */
+
+function learnScore(entry, sc) {
+  var spot = entry.spot, hs = sc.localHs;
+
+  /* knee to waist high is the whole window. Over about a metre it stops
+     being a lesson and starts being a hiding. */
+  var size;
+  if (hs < 0.25) size = 8;                        /* not a lesson, a paddle */
+  else if (hs <= 0.5) size = 45 + (hs - 0.25) / 0.25 * 50;
+  else if (hs <= 0.85) size = 95;
+  else size = clamp(95 - (hs - 0.85) * 105, 0, 95);
+
+  /* sand, and only sand */
+  var bottom = /reef|rock|coral|shelf/i.test((spot.bottom || "") + " " + (spot.type || "")) ? 20 : 100;
+
+  var rip = [100, 50, 8][ripRisk(spot, sc).level];
+
+  var lvl = spot.level === "beginner" ? 100 : spot.level === "all" ? 88
+          : spot.level === "intermediate" ? 50 : 12;
+
+  /* a longer period at this small a size means rolling whitewater rather
+     than something that dumps on the sand */
+  var gentle = sc.tp == null ? 60 : clamp(38 + (sc.tp - 5) * 9, 30, 100);
+
+  /* clean is easier to read when you do not know what you are looking at */
+  var wind = windScore(sc.wind, sc.windDir, spot.off);
+
+  var crowd = /busy|hub/i.test(spot.crowd || "") ? 55 : 100;
+
+  var v = 0.32 * size + 0.18 * bottom + 0.20 * rip + 0.13 * lvl +
+          0.07 * gentle + 0.06 * wind + 0.04 * crowd;
+
+  /* Safety, sand and a gentle reputation are worth nothing if there is no
+     wave. Without this a dead flat beach scores in the sixties purely for
+     being harmless, and gets recommended as somewhere to learn. */
+  if (size < 35) v = Math.min(v, size + 8);
+
+  return { score: clamp(Math.round(v), 0, 100),
+           parts: { size: size, bottom: bottom, rip: rip, level: lvl, gentle: gentle, wind: wind } };
+}
+
+/* The best hour to have a first go, today, at a beach you can drive to. */
+function bestLearnToday(date) {
+  var day = date || madridToday();
+  var best = null;
+  spotsInRange().forEach(function (e) {
+    var spot = e.spot;
+    e.rows.forEach(function (r) {
+      if (r.date !== day || r.dark) return;
+      if (boardRule(spot, day, r.hour).restricted) return;   /* has to be legal */
+      var L = learnScore(e, r);
+      /* A first lesson is an hour in the whitewater, not a swell chase, so
+         distance counts for more here than it does in the main plan. */
+      var v = L.score - Math.max(0, driveMin(spot) - 25) * 0.16;
+      if (!best || v > best.v) best = { entry: e, spot: spot, row: r, L: L, v: v };
+    });
+  });
+  if (!best) return null;
+
+  /* widen the peak hour into the run that stays close to it */
+  var floor = best.L.score - 10;
+  var from = best.row.hour, to = best.row.hour;
+  var byHour = {};
+  best.entry.rows.forEach(function (r) { if (r.date === day) byHour[r.hour] = r; });
+  var holds = function (h) {
+    var r = byHour[h];
+    return r && !r.dark && !boardRule(best.spot, day, h).restricted &&
+           learnScore(best.entry, r).score >= floor;
+  };
+  /* Cap it: on a uniformly mediocre day the run would otherwise stretch
+     from first light to dusk, which is not a window, it is a date. */
+  while (holds(from - 1) && best.row.hour - from < 2) from--;
+  while (holds(to + 1) && to - best.row.hour < 2) to++;
+
+  /* If it is sending you a long way, justify it: what is the best you could
+     do without leaving the area? */
+  var nearBest = null;
+  spotsInRange().forEach(function (e) {
+    if (driveMin(e.spot) > 25) return;
+    e.rows.forEach(function (r) {
+      if (r.date !== day || r.dark) return;
+      if (boardRule(e.spot, day, r.hour).restricted) return;
+      var L = learnScore(e, r);
+      if (!nearBest || L.score > nearBest.score) nearBest = { score: L.score, spot: e.spot, row: r };
+    });
+  });
+
+  return { pick: best, from: from, to: to, date: day, near: nearBest };
+}
+
+/* Today may simply not be a day to learn on. Look ahead rather than dressing
+   up a flat sea as a lesson. */
+function nextLearnDay() {
+  for (var i = 0; i < S.model.days.length; i++) {
+    var lr = bestLearnToday(S.model.days[i]);
+    if (lr && lr.pick.L.score >= 55) return lr;
+  }
+  return null;
+}
+
+function esc0(t) { return String(t == null ? "" : t); }
+function learnWhy(lr) {
+  var p = lr.pick.L.parts, r = lr.pick.row, spot = lr.pick.spot, out = [];
+  out.push(r.localHs < 0.25
+    ? "It is almost flat, which is not much of a lesson but is at least safe"
+    : r.localHs <= 0.9
+      ? mtr(r.localHs) + " is about right — big enough to push you along, small enough to be harmless"
+      : "At " + mtr(r.localHs) + " it is on the big side for a first go; stay in the whitewater");
+  if (p.bottom === 100) out.push("it is sand the whole way, with no reef to land on");
+  if (p.rip >= 100) out.push("there is essentially no rip running");
+  else if (p.rip >= 50) out.push("the rip risk is only moderate");
+  if (spot.level === "beginner" || spot.level === "all") out.push("and it is a forgiving beach in the first place");
+  var s = out.join(", ");
+  s = s.charAt(0).toUpperCase() + s.slice(1) + ".";
+
+  /* If it only won because everything else was flat, do not let the good
+     news bury the reason it is a compromise. */
+  if (p.bottom < 100) {
+    s += " Be aware this is not clean sand — " + esc0(spot.bottom) + ", which is not what you want " +
+         "underneath you on a first go. It is here because nothing better is working.";
+  }
+  if (p.level < 60) {
+    s += " It is also not a beginner's beach by reputation.";
+  }
+  return s;
 }
 
 /* ── a recommendation for each beach, in words ──────────────────────────
