@@ -470,11 +470,18 @@ function buildModel(raw) {
     var seenK = {};
     out.spots.forEach(function (e) { e.rows.forEach(function (r) { seenK[r.key] = 1; }); });
     out.hours = Object.keys(seenK).sort();          /* ISO strings sort chronologically */
-    var seenD = {};
+    /* The providers' horizon rarely lands on midnight, so the last "day" is
+       often a couple of pre-dawn hours. That is an artefact, not a forecast
+       day — counting it produces a row that can only ever say "no data". */
+    var perDay = {};
     out.hours.forEach(function (k) {
       var d = k.slice(0, 10);
-      if (!seenD[d]) { seenD[d] = 1; out.days.push(d); }
+      perDay[d] = (perDay[d] || 0) + 1;
     });
+    Object.keys(perDay).sort().forEach(function (d) {
+      if (perDay[d] >= 8) out.days.push(d);
+    });
+    out.hours = out.hours.filter(function (k) { return perDay[k.slice(0, 10)] >= 8; });
   }
   return out;
 }
