@@ -580,6 +580,67 @@ console.log('\nWorker end-to-end\n');
   ok('the paid and open-ended routes still require the access code');
 }
 
+/* --- the day, narrated --- */
+const DAY_OK = {
+  date: new Date().toISOString().slice(0, 10), origin: 'base', maxDrive: 999, when: 'any',
+  rows: [
+    { h: 8, name: 'Playa de El Palmar', score: 61, hs: 0.8, wind: 9, windWord: 'offshore' },
+    { h: 9, name: 'Playa de El Palmar', score: 66, hs: 0.9, wind: 8, windWord: 'offshore' },
+    { h: 14, name: 'Playa de Cortadura', score: 31, hs: 0.5, wind: 18, windWord: 'onshore' },
+  ],
+};
+{
+  installFetch({ 'api.anthropic.com': (u, i, reply) => reply(claudeReply(
+    'A small clean morning. Go to El Palmar between eight and ten, when it is under a metre with the wind off the land. By early afternoon the wind turns onshore and Cortadura at half a metre is not worth the drive.')) });
+  const r = await reqNoCode('/api/day', DAY_OK);
+  const d = await r.json();
+  assert.equal(r.status, 200);
+  assert.match(d.text, /El Palmar/);
+  const sent = JSON.parse(calls.find((c) => c.url.includes('anthropic')).body);
+  assert.equal(sent.model, 'claude-opus-5');
+  assert.equal(sent.fallbacks, 'default', 'refusal fallback is on by default');
+  assert.equal(sent.output_config.effort, 'low');
+  assert.ok(!sent.tools, 'no web search — this narrates the table, Live check does the searching');
+  assert.match(sent.messages[0].content, /09:00  Playa de El Palmar  score 66/);
+  assert.match(sent.system, /Never mention anything that is not in the table/);
+  const hdr = calls.find((c) => c.url.includes('anthropic')).headers || {};
+  ok('day: opus 5, effort low, fallbacks on, no tools, table reaches the prompt');
+}
+{
+  installFetch();
+  const bad = [
+    [{ ...DAY_OK, origin: 'mars' }, 'bad origin'],
+    [{ ...DAY_OK, maxDrive: 33 }, 'bad drive'],
+    [{ ...DAY_OK, when: 'midnight' }, 'bad when'],
+    [{ ...DAY_OK, date: '2031-01-01' }, 'date out of range'],
+    [{ ...DAY_OK, rows: [{ ...DAY_OK.rows[0], name: 'Bondi' }] }, 'unknown beach'],
+    [{ ...DAY_OK, rows: Array(19).fill(DAY_OK.rows[0]) }, 'bad rows'],
+    [{ ...DAY_OK, rows: [{ ...DAY_OK.rows[0], windWord: 'sideways' }] }, 'bad wind word'],
+  ];
+  for (const [body, why] of bad) {
+    const r = await reqNoCode('/api/day', body);
+    assert.equal(r.status, 400, why);
+    assert.equal((await r.json()).error, why);
+  }
+  assert.equal(calls.filter((c) => c.url.includes('anthropic')).length, 0, 'nothing bad ever reaches Claude');
+  ok('day: every field is checked against a short enum, so the cache key space is bounded');
+}
+{
+  installFetch();
+  const r = await reqNoCode('/api/day', DAY_OK, { origin: 'https://evil.test' });
+  assert.equal(r.status, 403);
+  ok('day: refused from another origin');
+}
+{
+  installFetch({ 'api.anthropic.com': (u, i, reply) => reply({ ...claudeReply('x'), stop_reason: 'refusal', stop_details: { type: 'refusal', category: null } }) });
+  const r = await reqNoCode('/api/day', { ...DAY_OK, when: 'eve' });   // different key from the cached one above
+  const d = await r.json();
+  assert.equal(r.status, 200);
+  assert.equal(d.refused, true);
+  assert.equal(d.text, null);
+  ok('day: a refusal comes back as a clean null, not as prose');
+}
+
 /* --- unknown route --- */
 {
   installFetch();

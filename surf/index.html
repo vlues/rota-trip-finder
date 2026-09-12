@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#F2F7F9" media="(prefers-color-scheme:light)">
 <meta name="theme-color" content="#071620" media="(prefers-color-scheme:dark)">
 <title>Rota Wave Watch</title>
-<meta name="app-version" content="20260912113146">
+<meta name="app-version" content="20260912121115">
 <meta name="description" content="Live bodyboarding conditions for Rota and the Gulf of Cádiz — when to go, where to park, what to wear, and whether boards are allowed.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -99,6 +99,26 @@ header{position:sticky;top:0;z-index:50;background:var(--panel);border-bottom:1p
 .learn .plan-hero b{font-family:Antonio,sans-serif;font-size:19px;font-weight:700;display:block;line-height:1.1}
 .learn .plan-hero span{display:block;font-size:12.5px;color:var(--ink-2)}
 .learn .plan-hero span+span{color:var(--muted);font-size:11.5px}
+
+/* ───────────────────── hour by hour ───────────────────── */
+.hours{border-color:var(--teal)}
+.dayread{margin-top:10px;background:var(--sunk);border-left:3px solid var(--teal);border-radius:9px;
+  padding:10px 12px;font-size:13.5px;line-height:1.5;color:var(--ink)}
+.dayread p{margin:0}
+.dayread .foot{display:block;margin-top:6px;font-size:11px}
+.dayread .spinner{display:inline-block;vertical-align:middle;margin-right:6px}
+.runs{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.run{display:grid;grid-template-columns:auto auto 1fr auto;gap:9px;align-items:center;
+  border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.run-time{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-2);white-space:nowrap;min-width:82px}
+.run-score{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:12px;border-radius:7px;
+  min-width:32px;height:28px;display:grid;place-items:center}
+.run-main{min-width:0;display:grid;gap:1px}
+.run-main b{font-size:13.5px;line-height:1.2}
+.run-main span{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run-dead{opacity:.6}
+@media (max-width:420px){.run{grid-template-columns:auto auto 1fr}.run-open{grid-column:3;justify-self:end}
+  .run-time{min-width:0}}
 
 /* ───────────────────── plan preferences ───────────────────── */
 .prefs{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;align-items:center}
@@ -570,9 +590,9 @@ details[open]>summary:before{content:"▾ "}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <!-- Shared, secret-free build config: carries the deployed Worker URL so Live
      check needs no per-device setup. Same file the other sub-apps use. -->
-<script src="../build-check.js?v=20260912113146"></script>
-<script src="../config.js?v=20260912113146"></script>
-<script src="./data.js?v=20260912113146"></script>
-<script src="./app.js?v=20260912113146"></script>
+<script src="../build-check.js?v=20260912121115"></script>
+<script src="../config.js?v=20260912121115"></script>
+<script src="./data.js?v=20260912121115"></script>
+<script src="./app.js?v=20260912121115"></script>
 </body>
 </html>

@@ -1443,6 +1443,7 @@ function renderNow() {
   var host = $("#v-now"); host.innerHTML = "";
   renderPlanCard(host);
   renderLearnCard(host);
+  renderHourCard(host);
   var pick = currentPick();
   if (!pick) { host.appendChild(el("p", "empty", "No forecast for this hour.")); return; }
   var sc = pick.row, spot = pick.entry.spot, b = band(sc.score);
@@ -1773,6 +1774,153 @@ function renderLearnCard(host) {
     S.spotId = spot.id; S.sel = { key: r.key }; render();
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
+}
+
+/* ── the day, hour by hour ───────────────────────────────────────────────
+   The Grid shows this as a row of coloured numbers. This is the same thing
+   as a list you can read: for each daylight hour, the best beach a board is
+   allowed on, and what it is doing. Consecutive hours at the same beach are
+   folded into one line, because "El Palmar, 08:00 to 11:00" is the answer
+   and eight separate rows are not. The arithmetic is all here on the page;
+   Claude only turns the table into a paragraph afterwards.                */
+
+function bestLegalAt(key) {
+  var p = parseKey(key), best = null;
+  spotsInRange().forEach(function (e) {
+    var r = rowAt(e, key);
+    if (!r || r.dark) return;
+    if (boardRule(e.spot, p.date, p.hour).restricted) return;
+    if (!best || r.score > best.row.score) best = { entry: e, row: r };
+  });
+  return best;
+}
+
+function windWordFor(r, spot) {
+  if (r.wind == null || r.windDir == null) return "cross-shore";
+  if (r.wind < 4) return "glassy";
+  var d = angDiff(r.windDir, spot.off);
+  return d < 60 ? "offshore" : d < 120 ? "cross-shore" : "onshore";
+}
+
+function hourlyPlan(date) {
+  var hours = [];
+  for (var h = 0; h < 24; h++) {
+    var key = date + "T" + pad(h) + ":00";
+    if (S.model.hours.indexOf(key) < 0) continue;
+    var b = bestLegalAt(key);
+    if (!b) continue;
+    hours.push({ h: h, entry: b.entry, spot: b.entry.spot, row: b.row });
+  }
+  /* fold runs at the same beach */
+  var runs = [];
+  hours.forEach(function (x) {
+    var last = runs[runs.length - 1];
+    if (last && last.spot.id === x.spot.id && last.to === x.h - 1) {
+      last.to = x.h;
+      if (x.row.score > last.peak.score) last.peak = x.row;
+      last.scores.push(x.row.score);
+    } else {
+      runs.push({ spot: x.spot, entry: x.entry, from: x.h, to: x.h, peak: x.row, scores: [x.row.score] });
+    }
+  });
+  return { hours: hours, runs: runs };
+}
+
+var DAY_KEY = "rotasurf.day.v1";
+function dayCacheKey(date) { return [date, S.origin, S.maxDrive, S.when].join("|"); }
+function dayGet(date) {
+  try {
+    var all = JSON.parse(localStorage.getItem(DAY_KEY) || "{}"), hit = all[dayCacheKey(date)];
+    return hit && Date.now() - hit.at < 3 * 3600 * 1000 ? hit : null;
+  } catch (e) { return null; }
+}
+function dayPut(date, d) {
+  try {
+    var all = JSON.parse(localStorage.getItem(DAY_KEY) || "{}");
+    var ks = Object.keys(all);
+    if (ks.length > 12) ks.slice(0, ks.length - 12).forEach(function (k) { delete all[k]; });
+    all[dayCacheKey(date)] = { at: Date.now(), text: d.text, model: d.model };
+    localStorage.setItem(DAY_KEY, JSON.stringify(all));
+  } catch (e) { /* private mode */ }
+}
+var dayTried = {};
+
+function renderHourCard(host) {
+  var date = (S.sel && S.sel.key) ? S.sel.key.slice(0, 10) : madridToday();
+  var plan = hourlyPlan(date);
+  var card = el("section", "card hours");
+  var title = date === madridToday() ? "Today, hour by hour" : dayLabel(date) + ", hour by hour";
+
+  if (!plan.runs.length) {
+    card.innerHTML = '<h3>' + esc(title) + '</h3>' +
+      '<p class="foot">No daylight hour with a board allowed anywhere in range. Widen the drive limit.</p>';
+    host.appendChild(card);
+    return;
+  }
+
+  card.innerHTML = '<h3>' + esc(title) + '</h3>' +
+    '<p class="foot">For each hour, the best beach you are allowed to ride at. Hours at the same beach are folded together.</p>' +
+    '<div class="dayread" id="dayRead"><span class="spinner sm"></span> Reading the day…</div>' +
+    '<ol class="runs">' + plan.runs.map(function (run) {
+      var col = scoreSolid(run.peak.score), b = band(run.peak.score);
+      var span = run.from === run.to ? hhmm(run.from) : hhmm(run.from) + "–" + hhmm(run.to + 1);
+      return '<li class="run' + (run.peak.score < 30 ? " run-dead" : "") + '">' +
+        '<span class="run-time">' + span + '</span>' +
+        '<span class="run-score" style="background:' + col.bg + ';color:' + col.ink + '">' + run.peak.score + '</span>' +
+        '<span class="run-main"><b>' + esc(run.spot.name) + '</b>' +
+          '<span>' + esc(b.word) + ' · ' + mtr(run.peak.localHs) + ' · ' + esc(windLabel(run.peak, run.spot)) +
+          ' · ' + driveMin(run.spot) + ' min</span></span>' +
+        '<button class="mini run-open" data-spot="' + esc(run.spot.id) + '" data-key="' + esc(run.peak.key) + '">open</button>' +
+      '</li>';
+    }).join("") + '</ol>';
+  host.appendChild(card);
+
+  $$(".run-open", card).forEach(function (b) {
+    b.addEventListener("click", function () {
+      S.spotId = b.getAttribute("data-spot"); S.sel = { key: b.getAttribute("data-key") }; render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+
+  readTheDay(card, date, plan);
+}
+
+/* Claude turns the table into a paragraph. Cached three hours per
+   (date, origin, drive, when) — the same key the Worker bounds itself on. */
+function readTheDay(card, date, plan) {
+  var box = $("#dayRead", card);
+  var c = cfg();
+  if (!c.api) { box.remove(); return; }
+
+  var hit = dayGet(date);
+  if (hit) { showDay(box, hit.text, hit.model, hit.at); return; }
+
+  var k = dayCacheKey(date);
+  if (dayTried[k]) { box.remove(); return; }
+  dayTried[k] = true;
+
+  var rows = plan.hours.map(function (x) {
+    return { h: x.h, name: x.spot.name, score: x.row.score, hs: +x.row.localHs.toFixed(1),
+             wind: Math.round(x.row.wind || 0), windWord: windWordFor(x.row, x.spot) };
+  }).slice(0, 18);
+
+  fetch(c.api + "/api/day", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date: date, origin: S.origin, maxDrive: S.maxDrive, when: S.when, rows: rows })
+  })
+  .then(function (r) { return r.ok ? r.json() : null; })
+  .then(function (d) {
+    if (!document.body.contains(box)) return;
+    if (d && d.text) { dayPut(date, d); showDay(box, d.text, d.model, Date.now()); }
+    else box.remove();
+  })
+  .catch(function () { if (document.body.contains(box)) box.remove(); });
+}
+function showDay(box, text, model, at) {
+  box.innerHTML = '<p>' + esc(text) + '</p>' +
+    '<span class="foot">Read by Claude' + (model ? ' (' + esc(model) + ')' : '') +
+    ' from the table below · ' + esc(agoLabel(at)) + '</span>';
 }
 
 /* ── the one-button answer ──────────────────────────────────────────── */

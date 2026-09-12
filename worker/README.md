@@ -12,6 +12,7 @@ The secrets-holding half. Root README has the full setup.
 | POST | `/api/intent`  | sentence → structured criteria |
 | POST | `/api/ai`      | concierge opinion over the current results |
 | POST | `/api/surf`    | live beach intel for Wave Watch — web search, cached 6 h, **no access code** |
+| POST | `/api/day`     | Wave Watch's hour-by-hour table narrated by Claude Opus 5 — cached 3 h on enums only, **no access code** |
 
 POST routes require `X-Trip-Code: <ACCESS_CODE>` when that secret is set — except
 `/api/surf`, which is open so that Wave Watch needs no setup. It is bounded

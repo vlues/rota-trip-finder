@@ -10,6 +10,7 @@
  *   POST /api/flights  flight search (Sky-Scrapper via RapidAPI; Amadeus if
  *                      you still have pre-decommission credentials)
  *   POST /api/surf     live beach intel for Wave Watch (web search, cached 6 h)
+ *   POST /api/day      Wave Watch's hour-by-hour table, narrated (cached 3 h)
  *   POST /api/plan     day-by-day area itinerary
  *   POST /api/ai       Claude concierge over the current results
  *
@@ -632,6 +633,86 @@ export function tidyIntel(raw) {
   }).filter(Boolean).join('\n');
 }
 
+/* ── the day, narrated ──────────────────────────────────────────────────
+   Wave Watch works out the best beach for every hour itself; that part is
+   arithmetic and stays on the page. What it cannot do is turn eighteen rows
+   of numbers into three sentences a beginner can act on. That is the whole
+   job here: read the table, say what the day is like, and when to go. No
+   web search — Live check does that — and nothing is invented: every fact
+   in the answer has to come from the rows it was given. */
+
+const DAY_MODEL = 'claude-opus-5';
+const DAY_ORIGINS = new Set(['town', 'base', 'me']);
+const DAY_DRIVES = new Set([20, 45, 75, 999]);
+const DAY_WHENS = new Set(['any', 'dawn', 'am', 'pm', 'eve']);
+
+const DAY_SYSTEM = `You are writing the "read the day" paragraph inside "Rota Wave Watch", a bodyboarding forecast for someone based in Rota, Spain, who is new to the sport and does not read surf numbers fluently.
+
+You are given a table: one row per daylight hour, each with the best beach that hour, its score out of 100, the wave height at the beach in metres, the wind in knots and whether that wind is offshore, cross-shore or onshore. The page already shows the table. Do not repeat it row by row.
+
+Write 3 to 5 plain sentences that a beginner can act on: what kind of day it is overall, the one window that is worth going for and why, when it is not worth bothering and why, and how the day changes (wind filling in, a beach coming good, the tide). Name beaches by their names. Prefer plain words over surf jargon; if you use a number, say what it means. If every score is under 30, say so honestly — it is a flat day and a swim with the board — and do not dress it up. Never mention anything that is not in the table. No headings, no bullet points, no preamble, no sign-off.`;
+
+async function dayNarrative(body, env) {
+  const rows = (body.rows || []).map((r) =>
+    `${String(r.h).padStart(2, '0')}:00  ${r.name}  score ${r.score}  ${r.hs} m  ${r.wind} kn ${r.windWord}`
+  ).join('\n');
+  const when = body.when && body.when !== 'any' ? ` They only want to go in the ${body.when === 'dawn' ? 'early morning' : body.when === 'am' ? 'morning' : body.when === 'pm' ? 'afternoon' : 'evening'}.` : '';
+  const content = `Date: ${body.date}. Driving from ${body.origin === 'base' ? 'the naval station' : body.origin === 'me' ? 'where they are' : 'Rota town'}` +
+    (body.maxDrive < 900 ? `, no more than ${body.maxDrive} minutes.` : '.') + when +
+    `\n\nBest beach each hour:\n${rows}\n\nWrite the paragraph.`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      /* the refusal fallback beta, so a policy decline re-runs on another
+         model inside the same call instead of coming back empty */
+      'anthropic-beta': 'server-side-fallback-2026-07-01',
+    },
+    body: JSON.stringify({
+      model: DAY_MODEL,
+      max_tokens: 1024,                                  /* it is a paragraph */
+      system: DAY_SYSTEM,
+      output_config: { effort: 'low' },                  /* summarising a small table */
+      fallbacks: 'default',
+      messages: [{ role: 'user', content }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  if (data.stop_reason === 'refusal') {
+    return { demo: false, text: null, refused: true, model: data.model || DAY_MODEL };
+  }
+  const text = (data.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
+  return { demo: false, text, model: data.model || DAY_MODEL };
+}
+
+/* Everything the client sends is checked against a short enum, so the cache
+   key space — and with it the most this can ever cost in a day — is bounded
+   whatever anyone posts. */
+function validateDay(body) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.date || ''))) return 'bad date';
+  const d = new Date(body.date + 'T00:00:00Z'), now = new Date();
+  const ahead = (d - now) / 86400000;
+  if (!(ahead > -2 && ahead < 12)) return 'date out of range';
+  if (!DAY_ORIGINS.has(body.origin)) return 'bad origin';
+  if (!DAY_DRIVES.has(Number(body.maxDrive))) return 'bad drive';
+  if (!DAY_WHENS.has(body.when)) return 'bad when';
+  const rows = body.rows;
+  if (!Array.isArray(rows) || rows.length < 1 || rows.length > 18) return 'bad rows';
+  for (const r of rows) {
+    if (!Number.isInteger(r.h) || r.h < 0 || r.h > 23) return 'bad hour';
+    if (!SURF_BEACHES.has(String(r.name || ''))) return 'unknown beach';
+    if (!Number.isFinite(r.score) || r.score < 0 || r.score > 100) return 'bad score';
+    if (!Number.isFinite(r.hs) || r.hs < 0 || r.hs > 15) return 'bad height';
+    if (!Number.isFinite(r.wind) || r.wind < 0 || r.wind > 120) return 'bad wind';
+    if (!['offshore', 'cross-shore', 'onshore', 'glassy'].includes(r.windWord)) return 'bad wind word';
+  }
+  return null;
+}
+
 async function surfIntel(body, env) {
   const model = env.CLAUDE_MODEL || DEFAULT_MODEL;
   const beach = [body.name, body.town, 'Cádiz', 'Spain'].filter(Boolean).join(', ').slice(0, 200);
@@ -817,14 +898,14 @@ export default {
         stayProvider: name,
         accessCodeRequired: Boolean(env.ACCESS_CODE),
         /* Live check needs none, so a page can tell whether to ask. */
-        openRoutes: ['/api/surf'],
+        openRoutes: ['/api/surf', '/api/day'],
         /* Every POST route sits behind the access code, so without this there
            is no way to tell a Worker running old code from a wrong passphrase —
            both answer 401. Listing them here, on the one ungated endpoint,
            makes a deploy verifiable by anyone. */
         routes: [
           '/api/stays', '/api/flights', '/api/plan', '/api/intent',
-          '/api/spot', '/api/trail', '/api/surf', '/api/rings-filter',
+          '/api/spot', '/api/trail', '/api/surf', '/api/day', '/api/rings-filter',
           '/api/ai', '/api/diag',
         ],
       }, request, env);
@@ -838,7 +919,7 @@ export default {
        and only once per beach per six hours. Everything else — the paid stay
        and flight providers, and the open-ended Claude routes — still needs
        the shared code. */
-    const isOpenIntel = url.pathname === '/api/surf' && request.method === 'POST';
+    const isOpenIntel = (url.pathname === '/api/surf' || url.pathname === '/api/day') && request.method === 'POST';
     if (isOpenIntel && !originAllowed(request, env)) {
       return json({ error: 'This endpoint only answers requests from the site.' }, request, env, 403);
     }
@@ -892,6 +973,16 @@ export default {
           const key = 'surf:v2:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 10);
           return json(await cached(key, 6 * 3600, () => surfIntel(body, env)), request, env);
         }
+        case '/api/day': {
+          if (!env.ANTHROPIC_API_KEY) return json({ demo: true, text: null }, request, env);
+          const bad = validateDay(body);
+          if (bad) return json({ error: bad }, request, env, 400);
+          /* Keyed on the enums only — never on the rows — so varying the
+             table cannot mint new cache entries. Three hours: the forecast
+             behind it moves every model run. */
+          const key = 'day:v1:' + [body.date, body.origin, body.maxDrive, body.when].join(':');
+          return json(await cached(key, 3 * 3600, () => dayNarrative(body, env)), request, env);
+        }
         case '/api/rings-filter': {
           if (!env.ANTHROPIC_API_KEY) return json({ demo: true, criteria: null }, request, env);
           const key = 'rfilter:' + String(body.text || '').toLowerCase().trim().slice(0, 120);
@@ -916,4 +1007,4 @@ export default {
   },
 };
 
-export const __test = { nightsBetween, demoStays, demoFlights, normalizeFlight, searchStays, searchFlights, diagnose, makePlan, tidyIntel };
+export const __test = { nightsBetween, demoStays, demoFlights, normalizeFlight, searchStays, searchFlights, diagnose, makePlan, tidyIntel, validateDay };
