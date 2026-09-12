@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#F2F7F9" media="(prefers-color-scheme:light)">
 <meta name="theme-color" content="#071620" media="(prefers-color-scheme:dark)">
 <title>Rota Wave Watch</title>
-<meta name="app-version" content="20260911223040">
+<meta name="app-version" content="20260912081551">
 <meta name="description" content="Live bodyboarding conditions for Rota and the Gulf of Cádiz — when to go, where to park, what to wear, and whether boards are allowed.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -133,7 +133,22 @@ main{padding:12px 12px 0;max-width:720px;margin:0 auto;display:grid;gap:12px;min
 /* ───────────────────────────── stats ───────────────────────────── */
 .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line-2);
   border:1px solid var(--line-2);border-radius:10px;overflow:hidden}
-.stat{background:var(--panel);padding:9px 10px;min-width:0}
+.stat{background:var(--panel);padding:9px 10px;min-width:0;width:100%;display:block;
+  text-align:left;position:relative;transition:background .12s}
+.stat-x{cursor:pointer}
+.stat-x:active{background:var(--sunk)}
+.stat-x.on{background:var(--sunk);box-shadow:inset 0 0 0 2px var(--teal)}
+.qmark{display:inline-grid;place-items:center;width:12px;height:12px;border-radius:50%;
+  border:1px solid var(--line);color:var(--muted);font-size:8px;margin-left:5px;
+  vertical-align:middle;font-family:"IBM Plex Sans",sans-serif;letter-spacing:0}
+.stat-x.on .qmark{background:var(--teal);border-color:var(--teal);color:var(--panel)}
+.stat-hint{text-align:center;margin-top:7px!important}
+.statx{margin-top:10px;background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:12px}
+.statx>b{font-size:14.5px;display:block}
+.statx p{margin:6px 0 0;font-size:13px;color:var(--ink-2)}
+.statx-now{background:var(--panel);border-radius:8px;padding:8px 10px;color:var(--ink)!important;font-weight:500}
+.statx-good{color:var(--teal)!important}
+.statx-close{margin-top:10px}
 .stat b{display:block;font-size:16px;font-weight:600;margin-top:2px;overflow-wrap:anywhere}
 .stat .note{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35}
 @media(min-width:560px){.stats{grid-template-columns:repeat(4,1fr)}}
@@ -414,9 +429,16 @@ details[open]>summary:before{content:"▾ "}
 .day-none{padding:9px 10px;font-size:12.5px;color:var(--muted)}
 
 /* ───────────────────── spots: best window + distance ───────────────────── */
-.spot-best{margin:8px 0 0;font-size:12.5px;color:var(--ink-2);
-  background:var(--sunk);border-radius:8px;padding:6px 9px}
-.spot-best-none{color:var(--muted)}
+.verdict-box{margin:9px 0 0;border-radius:9px;padding:9px 11px;border-left:3px solid var(--line);
+  background:var(--sunk)}
+.verdict-box b{font-size:14.5px;display:block}
+.verdict-box p{margin:3px 0 0;font-size:13px;color:var(--ink-2)}
+.verdict-later{color:var(--muted)!important;font-size:12.5px!important}
+.v-go{border-left-color:var(--good)} .v-go b{color:var(--good)}
+.v-ok{border-left-color:var(--teal)} .v-ok b{color:var(--teal)}
+.v-warn{border-left-color:var(--warn)} .v-warn b{color:var(--warn)}
+.v-meh{border-left-color:var(--muted)}
+.v-no{border-left-color:var(--line)} .v-no b{color:var(--muted)}
 .nearcard{border-color:var(--teal)}
 .nearcard p{margin:6px 0 0;font-size:13.5px}
 
@@ -533,9 +555,9 @@ details[open]>summary:before{content:"▾ "}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <!-- Shared, secret-free build config: carries the deployed Worker URL so Live
      check needs no per-device setup. Same file the other sub-apps use. -->
-<script src="../build-check.js?v=20260911223040"></script>
-<script src="../config.js?v=20260911223040"></script>
-<script src="./data.js?v=20260911223040"></script>
-<script src="./app.js?v=20260911223040"></script>
+<script src="../build-check.js?v=20260912081551"></script>
+<script src="../config.js?v=20260912081551"></script>
+<script src="./data.js?v=20260912081551"></script>
+<script src="./app.js?v=20260912081551"></script>
 </body>
 </html>

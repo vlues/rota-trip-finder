@@ -1031,189 +1031,219 @@ function drawWave(cv, sc, spot) {
 
   var cs = getComputedStyle(document.documentElement);
   var C = function (n, f) { var v = cs.getPropertyValue(n).trim(); return v || f; };
-  var sea = C("--sea", "#12658a"), seaD = C("--sea-deep", "#093f5c"),
-      foam = C("--foam", "#ffffff"), sky1 = C("--sky-1", "#bfe3f2"), sky2 = C("--sky-2", "#eaf6fb"),
-      sand = C("--sand", "#e3cfa8"), inkc = C("--ink", "#0b1f2a");
+  var sea = C("--sea", "#1B7FA3"), seaD = C("--sea-deep", "#0A4761"),
+      foam = C("--foam", "#ffffff"), sky1 = C("--sky-1", "#B9DFF0"), sky2 = C("--sky-2", "#EEF7FB"),
+      sand = C("--sand", "#E4D2AE"), inkc = C("--ink", "#0A1E29"), amber = C("--amber-b", "#D98C1F");
 
   var hs = Math.max(sc.localHs || 0, 0.05);
   var tp = clamp(sc.tp || 8, 4, 20);
   var t = (performance.now() - waveAnim.t0) / 1000;
 
-  /* geometry */
-  var horizon = H * 0.30;
-  var sealevel = horizon + (H - horizon) * 0.30;
-  var beachX = W * 0.80;                              /* waterline */
-  var D0 = Math.max(2.4, hs * 3.2);                    /* offshore depth, metres */
-  var pxM = clamp((H - horizon) * 0.42 / Math.max(1.1, hs * 2.1), 8, 70);
-  var waves = clamp(1.1 + 26 / tp, 2, 4.6);
-  var Lpx = beachX / waves;
-  var speed = Lpx / (tp * 0.55);                       /* slowed for legibility */
+  /* ── layout ──
+     A single wave, drawn side on, moving right to left into a beach on the
+     right. One wave rather than a field of sine curves: it is a picture of
+     the thing you are about to ride, not a chart. */
+  var horizon = Math.round(H * 0.34);
+  var shore   = Math.round(H * 0.86);           /* where the sand meets water */
+  var beachX  = W * 0.80;
+  var pxM     = clamp((shore - horizon) * 0.52 / Math.max(1.0, hs * 1.7), 10, 80);
+  var faceH   = hs * pxM;                        /* the wave face, to scale */
 
-  function depthAt(x) {
-    if (x >= beachX) return 0;
-    var f = x / beachX;
-    return D0 * (f < 0.42 ? 1 : Math.pow(1 - (f - 0.42) / 0.58, 1.35));
-  }
-  function amp(x) {
-    var d = depthAt(x);
-    if (d <= 0.05) return 0;
-    var ks = clamp(Math.pow(d / D0, -0.23), 1, 2.5);
-    var a = (hs / 2) * ks;
-    var lim = 0.42 * d;                                 /* depth-limited breaking */
-    return Math.min(a, lim);
-  }
-  function surfaceY(x, phase) {
-    var a = amp(x);
-    var k = 2 * Math.PI / Lpx;
-    /* Sharpen the crests as the wave feels bottom — real waves are not sines. */
-    var d = depthAt(x), sharp = clamp(1 - d / D0, 0, 1);
-    var th = k * x - t * speed * k + phase;
-    var s = Math.sin(th);
-    var v = s * (1 - 0.42 * sharp) + Math.pow(Math.abs(s), 1 + 1.9 * sharp) * Math.sign(s) * (0.42 * sharp);
-    return sealevel - v * a * pxM;
-  }
-  function isBreaking(x) {
-    var d = depthAt(x);
-    return d > 0.02 && (2 * amp(x)) >= 0.76 * d;
-  }
-
-  /* sky */
-  var sg = g.createLinearGradient(0, 0, 0, horizon + 12);
+  /* ── sky ── */
+  var sg = g.createLinearGradient(0, 0, 0, horizon);
   sg.addColorStop(0, sky1); sg.addColorStop(1, sky2);
-  g.fillStyle = sg; g.fillRect(0, 0, W, horizon + 12);
+  g.fillStyle = sg; g.fillRect(0, 0, W, horizon);
 
-  /* sand wedge behind the water */
-  g.beginPath();
-  g.moveTo(beachX - Lpx * 0.5, H); g.lineTo(beachX - Lpx * 0.15, sealevel + 2);
-  g.lineTo(W, sealevel - (H - horizon) * 0.10); g.lineTo(W, H); g.closePath();
-  g.fillStyle = sand; g.fill();
-
-  /* distant swell lines stacked up to the horizon, for depth */
-  g.strokeStyle = seaD; g.lineWidth = 1;
-  for (var q = 0; q < 4; q++) {
-    var qy = horizon + (sealevel - horizon) * (0.18 + q * 0.19);
-    var qdrift = ((t * speed * 0.35 + q * 37) % 74) - 37;
-    g.globalAlpha = 0.10 + q * 0.055;
-    g.beginPath();
-    for (var qx = -40; qx <= beachX; qx += 4) {
-      var qw = Math.sin((qx + qdrift) / (26 + q * 9)) * (1.1 + q * 0.9);
-      if (qx <= -40) g.moveTo(qx, qy + qw); else g.lineTo(qx, qy + qw);
-    }
-    g.stroke();
+  /* sun or moon, placed by where the sun actually is in the day */
+  var mins = sc.hour * 60;
+  var up = sc.sun.up, down = sc.sun.down;
+  if (mins >= up - 40 && mins <= down + 40) {
+    var f = clamp((mins - up) / Math.max(60, down - up), 0, 1);
+    var sx = W * (0.12 + f * 0.76);
+    var sy = horizon - 12 - Math.sin(f * Math.PI) * (horizon * 0.58);
+    g.beginPath(); g.arc(sx, sy, 13, 0, 6.283);
+    g.fillStyle = amber; g.globalAlpha = 0.85; g.fill(); g.globalAlpha = 1;
   }
-  g.globalAlpha = 1;
 
-  /* the water body */
-  g.beginPath();
-  g.moveTo(0, H);
-  for (var x = 0; x <= beachX; x += 2) g.lineTo(x, surfaceY(x, 0));
-  g.lineTo(beachX, H); g.closePath();
-  var wg = g.createLinearGradient(0, horizon, 0, H);
-  wg.addColorStop(0, sea); wg.addColorStop(1, seaD);
-  g.fillStyle = wg; g.fill();
-
-  /* crest highlight + whitewater where it is depth-limited */
-  g.beginPath();
-  for (var x2 = 0; x2 <= beachX; x2 += 2) {
-    var y2 = surfaceY(x2, 0);
-    if (x2 === 0) g.moveTo(x2, y2); else g.lineTo(x2, y2);
-  }
-  g.strokeStyle = foam; g.globalAlpha = 0.55; g.lineWidth = 1.6; g.stroke(); g.globalAlpha = 1;
-
-  for (var x3 = 0; x3 <= beachX; x3 += 4) {
-    if (!isBreaking(x3)) continue;
-    var y3 = surfaceY(x3, 0);
-    var slope = surfaceY(x3 + 4, 0) - y3;
-    if (slope > -0.15) continue;                       /* only the pitching face */
-    g.globalAlpha = 0.85;
-    g.fillStyle = foam;
-    for (var f = 0; f < 3; f++) {
-      var rr = 1.6 + Math.random() * 3.2;
+  /* cloud, as much of it as the forecast says */
+  var cover = clamp((sc.cloud == null ? 20 : sc.cloud) / 100, 0, 1);
+  if (cover > 0.12) {
+    g.fillStyle = foam; g.globalAlpha = 0.15 + cover * 0.5;
+    for (var ci = 0; ci < Math.round(cover * 5) + 1; ci++) {
+      var cx = ((ci * 137 + t * 3) % (W + 160)) - 80;
+      var cy = 14 + (ci % 3) * 17;
+      var cw = 40 + (ci % 4) * 22;
       g.beginPath();
-      g.arc(x3 + (Math.random() - 0.5) * 7, y3 + Math.random() * 9, rr, 0, 6.283);
+      g.ellipse(cx, cy, cw, 9 + (ci % 2) * 4, 0, 0, 6.283);
       g.fill();
     }
     g.globalAlpha = 1;
   }
 
-  /* soup running up the sand */
-  g.globalAlpha = 0.75; g.fillStyle = foam;
-  var runup = Math.abs(Math.sin(t * 0.55)) * Lpx * 0.30;
-  g.beginPath();
-  g.ellipse(beachX + runup * 0.6, sealevel + 3, Lpx * 0.30 + runup, 4.5, 0, 0, 6.283);
-  g.fill(); g.globalAlpha = 1;
+  /* ── distant sea, flat to the horizon ── */
+  /* down to the bottom of the frame, not just to the shoreline — the beach
+     wedge is drawn over the top of it and only covers the right-hand side. */
+  var og = g.createLinearGradient(0, horizon, 0, H);
+  og.addColorStop(0, seaD); og.addColorStop(1, sea);
+  g.fillStyle = og; g.fillRect(0, horizon, W, H - horizon);
 
-  /* ── the 1.75 m rider, standing at the waterline, for scale ── */
-  var ph = 1.75 * pxM;
-  var px = beachX + 16, py = sealevel + 2;
-  if (px + 10 < W) drawFigure(g, px, py, ph, inkc);
-
-  /* ── wind ── */
-  if (sc.wind != null && sc.windDir != null) {
-    var offness = Math.cos(angDiff(sc.windDir, spot.off) * Math.PI / 180);
-    /* The beach is on the right, so an offshore wind travels right-to-left. */
-    var dir = offness > 0 ? -1 : 1;
-    var n = clamp(Math.round((sc.wind || 0) / 4), 1, 5);
-    g.strokeStyle = inkc; g.lineWidth = 1.4; g.lineCap = "round";
-    for (var i2 = 0; i2 < n; i2++) {
-      var ay = 13 + i2 * 8.5, len = 16 + i2 * 6;
-      var span = W + 140;
-      var drift = ((t * (22 + (sc.wind || 0) * 1.6) + i2 * 53) % span) - 70;
-      var tipX = dir < 0 ? W - drift : drift;          /* the arrow head */
-      var tailX = tipX - dir * len;
-      g.globalAlpha = 0.30;
-      g.beginPath(); g.moveTo(tailX, ay); g.lineTo(tipX, ay); g.stroke();
-      g.beginPath();
-      g.moveTo(tipX, ay); g.lineTo(tipX - dir * 5, ay - 3);
-      g.moveTo(tipX, ay); g.lineTo(tipX - dir * 5, ay + 3);
-      g.stroke();
+  /* a few distant swell lines, subtle and parallaxed */
+  g.strokeStyle = foam; g.lineWidth = 1;
+  for (var q = 0; q < 3; q++) {
+    var qy = horizon + (shore - horizon) * (0.10 + q * 0.10);
+    var drift = ((t * (6 + q * 5)) % 90) - 45;
+    g.globalAlpha = 0.10 + q * 0.05;
+    g.beginPath();
+    for (var qx = -50; qx <= W; qx += 6) {
+      g.lineTo(qx, qy + Math.sin((qx + drift) / (34 + q * 10)) * (0.8 + q * 0.7));
     }
-    g.globalAlpha = 0.5;
-    g.font = "500 9.5px ui-monospace, 'IBM Plex Mono', monospace";
-    g.fillStyle = inkc;
-    g.fillText(Math.round(sc.wind) + " kn " + compass(sc.windDir) +
-      (offness > 0.28 ? " offshore" : offness < -0.28 ? " onshore" : " cross"), 10, 11);
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+
+  /* ── the beach ── */
+  g.beginPath();
+  g.moveTo(beachX - faceH * 0.4, H);
+  g.quadraticCurveTo(beachX + 10, shore - 2, W, shore - (shore - horizon) * 0.14);
+  g.lineTo(W, H); g.closePath();
+  g.fillStyle = sand; g.fill();
+
+  /* ── the wave ──
+     Position cycles with the period, so a long-period swell visibly takes
+     longer between waves than a short one. */
+  var cycle = tp * 0.8;
+  var phase = (t % cycle) / cycle;               /* 0 = far out, 1 = on the sand */
+  var wx = W * 1.02 - phase * (W * 1.02 - beachX * 0.52);
+  var steep = clamp(phase * 1.35, 0, 1);         /* it stands up as it comes in */
+  var h = faceH * (0.55 + steep * 0.75);
+  var baseY = shore - 4;
+  var crestY = baseY - h;
+  var backW = h * 2.1 + 26;                      /* the shoulder behind it */
+  var lipX = wx - h * (0.10 + steep * 0.42);     /* the lip throws forward */
+
+  /* body of the wave: back shoulder, up to the crest, pitching face */
+  g.beginPath();
+  g.moveTo(wx + backW, baseY + 6);
+  g.quadraticCurveTo(wx + backW * 0.42, baseY - h * 0.30, wx, crestY);
+  g.quadraticCurveTo(lipX - h * 0.18, crestY + h * 0.06, lipX - h * 0.34, crestY + h * 0.34);
+  g.quadraticCurveTo(lipX - h * 0.16, crestY + h * 0.74, wx - h * 0.06, baseY + 6);
+  g.closePath();
+  var wg = g.createLinearGradient(0, crestY, 0, baseY + 6);
+  wg.addColorStop(0, sea); wg.addColorStop(1, seaD);
+  g.fillStyle = wg; g.fill();
+
+  /* the lip itself, bright where it catches the light */
+  g.beginPath();
+  g.moveTo(wx, crestY);
+  g.quadraticCurveTo(lipX - h * 0.18, crestY + h * 0.06, lipX - h * 0.34, crestY + h * 0.34);
+  g.strokeStyle = foam; g.lineWidth = Math.max(2, h * 0.14);
+  g.lineCap = "round"; g.globalAlpha = 0.92; g.stroke(); g.globalAlpha = 1;
+
+  /* whitewater once it is properly breaking */
+  if (steep > 0.55) {
+    g.fillStyle = foam;
+    var fa = clamp((steep - 0.55) / 0.45, 0, 1);
+    g.globalAlpha = 0.55 * fa;
+    g.beginPath();
+    g.ellipse(lipX - h * 0.30, crestY + h * 0.55, h * 0.42, h * 0.30, 0, 0, 6.283);
+    g.fill();
+    g.globalAlpha = 0.85 * fa;
+    g.beginPath();
+    g.ellipse(lipX - h * 0.12, crestY + h * 0.18, h * 0.22, h * 0.16, 0, 0, 6.283);
+    g.fill();
     g.globalAlpha = 1;
   }
 
-  /* ── labels ── */
-  g.font = "600 11px ui-monospace, 'IBM Plex Mono', monospace";
-  g.fillStyle = inkc; g.globalAlpha = 0.72;
-  g.fillText(r1(hs) + " m face · " + Math.round(tp) + " s between crests", 10, horizon - 9);
+  /* soup sliding up the sand */
+  g.globalAlpha = 0.6; g.fillStyle = foam;
+  var run = Math.abs(Math.sin(t * 0.5)) * 26;
+  g.beginPath();
+  g.ellipse(beachX + run * 0.5, shore + 1, 44 + run, 4, 0, 0, 6.283);
+  g.fill(); g.globalAlpha = 1;
+
+  /* ── the rider, prone on the board, on the face of the wave ── */
+  if (h > 22) drawRider(g, lipX - h * 0.52, crestY + h * 0.46, clamp(h * 0.30, 12, 34), inkc);
+  else drawStander(g, beachX + 22, shore - 2, 1.75 * pxM, inkc);
+
+  /* ── the only labels worth having ── */
+  g.font = '600 11px ui-monospace, "IBM Plex Mono", monospace';
+  g.textAlign = "left";
+  g.fillStyle = inkc; g.globalAlpha = 0.7;
+  g.fillText(mtr(hs) + " · " + Math.round(tp) + " s apart", 12, horizon - 11);
+  if (sc.wind != null && sc.windDir != null) {
+    var offness = Math.cos(angDiff(sc.windDir, spot.off) * Math.PI / 180);
+    g.globalAlpha = 0.5;
+    g.fillText(Math.round(sc.wind) + " kn " + compass(sc.windDir) +
+      (offness > 0.28 ? " offshore" : offness < -0.28 ? " onshore" : " cross"), 12, horizon + 15);
+    /* one arrow, pointing the way the wind blows, rather than a drifting flock */
+    var dir = offness > 0 ? -1 : 1;
+    var ax = W - 58, ay = horizon + 11;
+    g.strokeStyle = inkc; g.globalAlpha = 0.4; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(ax - dir * 18, ay); g.lineTo(ax + dir * 18, ay);
+    g.moveTo(ax + dir * 18, ay); g.lineTo(ax + dir * 11, ay - 5);
+    g.moveTo(ax + dir * 18, ay); g.lineTo(ax + dir * 11, ay + 5);
+    g.stroke();
+  }
   g.globalAlpha = 1;
 
-  /* a one-metre rule against the left edge, so the figure is not the only
-     thing giving the picture its sense of size */
-  var rx = 13, rb = sealevel + 26, rt = rb - pxM;
-  g.strokeStyle = inkc; g.globalAlpha = 0.38; g.lineWidth = 1;
+  /* a one-metre rule against the wave, so the size is readable */
+  var rx = 30, rb = baseY, rt = rb - pxM;
+  g.strokeStyle = inkc; g.globalAlpha = 0.34; g.lineWidth = 1;
   g.beginPath();
-  g.moveTo(rx - 4, rt); g.lineTo(rx + 4, rt);
-  g.moveTo(rx - 4, rb); g.lineTo(rx + 4, rb);
+  g.moveTo(rx - 5, rt); g.lineTo(rx + 5, rt);
+  g.moveTo(rx - 5, rb); g.lineTo(rx + 5, rb);
   g.moveTo(rx, rt); g.lineTo(rx, rb);
   g.stroke();
-  g.globalAlpha = 0.62;
-  g.font = "500 9.5px ui-monospace, 'IBM Plex Mono', monospace";
-  g.fillText("1 m", rx + 7, (rt + rb) / 2 + 3);
-  g.globalAlpha = 0.45;
-  g.fillText("figure 1.75 m", 10, H - 8);
+  g.globalAlpha = 0.6;
+  g.font = '500 9.5px ui-monospace, "IBM Plex Mono", monospace';
+  g.fillText("1 m", rx + 8, (rt + rb) / 2 + 3);
   g.globalAlpha = 1;
 }
 
-function drawFigure(g, x, baseY, h, color) {
-  var u = h / 8;
-  g.save(); g.fillStyle = color; g.globalAlpha = 0.82;
-  g.beginPath(); g.arc(x, baseY - h + u * 0.9, u * 0.85, 0, 6.283); g.fill();      /* head */
-  g.lineWidth = Math.max(1.4, u * 0.75); g.strokeStyle = color; g.lineCap = "round";
+/* A bodyboarder, prone, board under the chest, angled down the line. */
+function drawRider(g, x, y, size, color) {
+  g.save();
+  g.translate(x, y);
+  g.rotate(-0.28);
+  g.fillStyle = color;
+  g.globalAlpha = 0.9;
+  /* the board */
   g.beginPath();
-  g.moveTo(x, baseY - h + u * 1.8); g.lineTo(x, baseY - h * 0.45);                 /* torso */
-  g.moveTo(x, baseY - h * 0.45); g.lineTo(x - u * 0.7, baseY);                      /* legs */
-  g.moveTo(x, baseY - h * 0.45); g.lineTo(x + u * 0.7, baseY);
-  g.moveTo(x, baseY - h * 0.82); g.lineTo(x - u * 1.25, baseY - h * 0.5);           /* arm */
+  g.ellipse(0, size * 0.16, size * 0.62, size * 0.17, 0, 0, 6.283);
+  g.fill();
+  /* body lying on it */
+  g.beginPath();
+  g.ellipse(-size * 0.06, -size * 0.02, size * 0.44, size * 0.15, -0.06, 0, 6.283);
+  g.fill();
+  /* head */
+  g.beginPath();
+  g.arc(size * 0.40, -size * 0.16, size * 0.15, 0, 6.283);
+  g.fill();
+  /* trailing legs and fins */
+  g.strokeStyle = color; g.lineWidth = Math.max(1.6, size * 0.10); g.lineCap = "round";
+  g.beginPath();
+  g.moveTo(-size * 0.40, size * 0.02);
+  g.quadraticCurveTo(-size * 0.72, size * 0.14, -size * 0.92, size * 0.02);
   g.stroke();
-  /* the board under the near arm */
-  g.globalAlpha = 0.62;
+  g.restore();
+}
+
+/* When the wave is too small to ride, someone stands on the sand instead —
+   still 1.75 m, still the scale reference. */
+function drawStander(g, x, baseY, h, color) {
+  var u = h / 8;
+  g.save(); g.fillStyle = color; g.strokeStyle = color; g.globalAlpha = 0.78;
+  g.beginPath(); g.arc(x, baseY - h + u * 0.9, u * 0.8, 0, 6.283); g.fill();
+  g.lineWidth = Math.max(1.4, u * 0.7); g.lineCap = "round";
   g.beginPath();
-  g.ellipse(x - u * 1.5, baseY - h * 0.44, u * 0.42, u * 1.5, -0.22, 0, 6.283);
+  g.moveTo(x, baseY - h + u * 1.7); g.lineTo(x, baseY - h * 0.46);
+  g.moveTo(x, baseY - h * 0.46); g.lineTo(x - u * 0.6, baseY);
+  g.moveTo(x, baseY - h * 0.46); g.lineTo(x + u * 0.6, baseY);
+  g.moveTo(x, baseY - h * 0.80); g.lineTo(x - u * 1.2, baseY - h * 0.48);
+  g.stroke();
+  g.globalAlpha = 0.55;
+  g.beginPath();
+  g.ellipse(x - u * 1.45, baseY - h * 0.42, u * 0.40, u * 1.45, -0.2, 0, 6.283);
   g.fill();
   g.restore();
 }
@@ -1445,25 +1475,27 @@ function renderNow() {
   var suit = suitFor(sc.sst);
   stats.innerHTML =
     '<div class="stats">' +
-      stat("Wave", mtr(sc.localHs), "at the beach · " + mtr(sc.offshoreHs) + " offshore") +
-      stat("Period", (sc.tp == null ? "—" : Math.round(sc.tp) + " s"), sc.tp >= 11 ? "groundswell — real power" : sc.tp >= 8 ? "decent push" : "short, weak chop") +
-      stat("Swell from", sc.swellDir == null ? "—" : compass(sc.swellDir) + " " + Math.round(sc.swellDir) + "°", sc.offBy > 0 ? Math.round(sc.offBy) + "° outside this beach's window" : "straight into the window") +
-      stat("Wind", windLabel(sc, spot), sc.gust != null ? "gusting " + Math.round(sc.gust) + " kn" : "") +
-      stat("Water", sc.sst == null ? "—" : r1(sc.sst) + " °C", suit.suit) +
+      stat("Wave", mtr(sc.localHs), "at the beach · " + mtr(sc.offshoreHs) + " offshore", "wave") +
+      stat("Period", (sc.tp == null ? "—" : Math.round(sc.tp) + " s"), sc.tp >= 11 ? "groundswell — real power" : sc.tp >= 8 ? "decent push" : "short, weak chop", "period") +
+      stat("Swell from", sc.swellDir == null ? "—" : compass(sc.swellDir) + " " + Math.round(sc.swellDir) + "°", sc.offBy > 0 ? Math.round(sc.offBy) + "° outside this beach's window" : "straight into the window", "wave") +
+      stat("Wind", windLabel(sc, spot), sc.gust != null ? "gusting " + Math.round(sc.gust) + " kn" : "", "windangle") +
+      stat("Water", sc.sst == null ? "—" : r1(sc.sst) + " °C", suit.suit, "water") +
       stat("Tide", tideLabel(sc.tide), nx.length
         ? nx.map(function (t) { return t.type + " " + t.at + " (" + (t.m >= 0 ? "+" : "") + r1(t.m) + " m)"; }).join(" · ")
-        : r1(sc.tide.m) + " m") +
+        : r1(sc.tide.m) + " m", "tidestate") +
       stat("Air", sc.airT == null ? "—" : Math.round(sc.airT) + " °C",
         (sc.feelsT != null ? "feels like " + Math.round(sc.feelsT) + " °C" : "") +
-        (sc.uv != null ? " · UV " + Math.round(sc.uv) : "")) +
-      stat("Sky", cloudWord(sc), (sc.rainP ? sc.rainP + "% chance of rain" : "no rain expected")) +
-      stat("Visibility", visWord(sc), sc.vis == null ? "" : Math.round(sc.vis / 1000) + " km — matters at dawn") +
+        (sc.uv != null ? " · UV " + Math.round(sc.uv) : ""), "feels") +
+      stat("Sky", cloudWord(sc), (sc.rainP ? sc.rainP + "% chance of rain" : "no rain expected"), "uv") +
+      stat("Visibility", visWord(sc), sc.vis == null ? "" : Math.round(sc.vis / 1000) + " km — matters at dawn", "vis") +
       stat("Current", sc.curV == null ? "—" : r1(sc.curV) + " m/s",
         sc.curV == null ? "" : (sc.curV < 0.25 ? "you will not feel it" : "it will drift you along the beach") +
-          (sc.curDir != null ? ", setting " + compass(sc.curDir) : "")) +
-      stat("Pressure", sc.pressure == null ? "—" : Math.round(sc.pressure) + " hPa", pressureWord(sc)) +
-      stat("Daylight", hhmm(Math.floor(sc.sun.up / 60)) + "–" + hhmm(Math.floor(sc.sun.down / 60)), sc.dark ? "dark right now" : "") +
+          (sc.curDir != null ? ", setting " + compass(sc.curDir) : ""), "current") +
+      stat("Pressure", sc.pressure == null ? "—" : Math.round(sc.pressure) + " hPa", pressureWord(sc), "pressure") +
+      stat("Daylight", hhmm(Math.floor(sc.sun.up / 60)) + "–" + hhmm(Math.floor(sc.sun.down / 60)), sc.dark ? "dark right now" : "", "light") +
     '</div>' +
+    '<div class="statx" hidden></div>' +
+    '<p class="foot stat-hint">Tap any of those to find out what it is and what today\'s number means.</p>' +
     '<div class="dialrow">' + compassSVG(sc, spot) +
       '<div class="diallegend">' +
         '<p><i class="k-swell"></i> swell in from ' + (sc.swellDir == null ? "—" : compass(sc.swellDir)) + '</p>' +
@@ -1473,6 +1505,7 @@ function renderNow() {
       '</div>' +
     '</div>';
   host.appendChild(stats);
+  wireStats(stats, sc, spot);
 
   /* ── why that score ── */
   var why = el("section", "card");
@@ -1757,9 +1790,121 @@ function renderPlanCard(host) {
   });
 }
 
-function stat(k, v, note) {
-  return '<div class="stat"><span class="lbl">' + esc(k) + '</span><b>' + esc(v) + '</b>' +
-    (note ? '<span class="note">' + esc(note) + '</span>' : '') + '</div>';
+/* Every tile is a button. Tapping one says, in words, what that number is and
+   what this particular value means today — because a figure like "6 s" tells
+   you nothing at all unless you already know what it is. */
+function stat(k, v, note, gid) {
+  return '<button class="stat' + (gid ? " stat-x" : "") + '"' +
+    (gid ? ' data-g="' + esc(gid) + '" aria-label="' + esc(k) + ' — tap to explain"' : '') + '>' +
+    '<span class="lbl">' + esc(k) + (gid ? '<i class="qmark">?</i>' : '') + '</span>' +
+    '<b>' + esc(v) + '</b>' +
+    (note ? '<span class="note">' + esc(note) + '</span>' : '') + '</button>';
+}
+
+function glossaryById(id) {
+  return (window.__SURF_GLOSSARY__ || []).filter(function (g) { return g.id === id; })[0] || null;
+}
+
+/* A plain reading of the actual value in front of you, not the definition. */
+function readingFor(id, sc, spot) {
+  var v;
+  switch (id) {
+    case "wave":
+      v = sc.localHs;
+      return v < 0.3 ? "Right now: " + mtr(v) + ". That is nothing — the sea is flat."
+        : v < 0.6 ? "Right now: " + mtr(v) + ". Small. You will be scrapping for anything rideable."
+        : v < 1.0 ? "Right now: " + mtr(v) + ". Modest but workable — a fun size on a sponge."
+        : v < 1.8 ? "Right now: " + mtr(v) + ". A good size for here. This is what you want."
+        : "Right now: " + mtr(v) + ". Big for this coast. Serious water moving; know your limits.";
+    case "period":
+      v = sc.tp;
+      if (v == null) return "";
+      return v < 7 ? "Right now: " + Math.round(v) + " s. Short — this is local wind chop, not real swell. It will have no push."
+        : v < 9 ? "Right now: " + Math.round(v) + " s. Borderline. There is something there but not much behind it."
+        : v < 11 ? "Right now: " + Math.round(v) + " s. Decent. The waves will have some shove."
+        : "Right now: " + Math.round(v) + " s. Proper groundswell from a distant storm. Organised and powerful.";
+    case "windangle":
+      if (sc.wind == null || sc.windDir == null) return "";
+      var d = angDiff(sc.windDir, spot.off);
+      return sc.wind < 4 ? "Right now: " + Math.round(sc.wind) + " kn. Barely any wind — glassy, which is ideal."
+        : d < 50 ? "Right now: " + Math.round(sc.wind) + " kn blowing offshore here. This is the good one: it holds the wave face up."
+        : d < 112 ? "Right now: " + Math.round(sc.wind) + " kn across the beach. Not ruinous, not helping."
+        : "Right now: " + Math.round(sc.wind) + " kn blowing straight onshore. It flattens the waves into mush.";
+    case "mix":
+      var sw = sc.swellH || 0, ww = sc.windWaveH || 0;
+      return ww > sw ? "Right now there is more wind chop (" + mtr(ww) + ") than real swell (" + mtr(sw) +
+          "). The wave height number is flattering it."
+        : "Right now: " + mtr(sw) + " of real swell against " + mtr(ww) + " of chop. The swell is the bigger part, which is what you want.";
+    case "tidestate":
+      return "Right now: " + tideLabel(sc.tide) + ". This beach works best on the " + spot.tide + " tide, so " +
+        (sc.parts.tide >= 65 ? "that suits it." : sc.parts.tide >= 45 ? "it is workable." : "you are on the wrong half of the cycle.");
+    case "water":
+      v = sc.sst;
+      if (v == null) return "";
+      return "Right now: " + r1(v) + " °C. That is a " + suitFor(v).suit.toLowerCase() + " day.";
+    case "current":
+      v = sc.curV;
+      if (v == null) return "";
+      return v < 0.25 ? "Right now: " + r1(v) + " m/s. You will not notice it."
+        : "Right now: " + r1(v) + " m/s. Enough to walk you down the beach — pick a landmark and check it.";
+    case "vis":
+      if (sc.vis == null) return "";
+      var km = sc.vis / 1000;
+      return km >= 10 ? "Right now: " + Math.round(km) + " km. Clear."
+        : km >= 4 ? "Right now: " + Math.round(km) + " km. A bit hazy, no problem."
+        : "Right now: " + Math.round(km) + " km. Poor — at dawn you may not see the sets coming.";
+    case "pressure":
+      if (sc.pressure == null) return "";
+      return "Right now: " + Math.round(sc.pressure) + " hPa. " +
+        (sc.pressure < 1005 ? "Low — unsettled, and swell is probably on its way."
+         : sc.pressure > 1022 ? "High — settled, which usually means small and clean."
+         : "Ordinary. Nothing to read into it.");
+    case "uv":
+      if (sc.uv == null) return "";
+      return "Right now: " + Math.round(sc.uv) + ". " +
+        (sc.uv >= 8 ? "Very strong. You will burn in under half an hour."
+         : sc.uv >= 6 ? "Strong. Wear sunscreen — the backs of the legs always catch it."
+         : "Mild. Nothing to worry about.");
+    case "feels":
+      if (sc.airT == null) return "";
+      return "Right now: " + Math.round(sc.airT) + " °C" +
+        (sc.feelsT != null ? ", feeling like " + Math.round(sc.feelsT) + " °C" : "") +
+        (sc.wind >= 15 ? ". The wind is what you will feel walking back to the car wet." : ".");
+    case "light":
+      return "Today: first usable light and last usable light are on the timeline card below. " +
+        (sc.dark ? "It is dark right now." : "There is light right now.");
+    default: return "";
+  }
+}
+
+/* One panel under the grid rather than a modal, so nothing is covered up. */
+function wireStats(host, sc, spot) {
+  var panel = $(".statx", host);
+  if (!panel) return;
+  $$(".stat-x", host).forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var id = btn.getAttribute("data-g");
+      var wasOn = btn.classList.contains("on");
+      $$(".stat-x", host).forEach(function (b) { b.classList.remove("on"); });
+      if (wasOn) { panel.hidden = true; panel.innerHTML = ""; return; }
+      btn.classList.add("on");
+      var g = glossaryById(id);
+      if (!g) { panel.hidden = true; return; }
+      var reading = readingFor(id, sc, spot);
+      panel.hidden = false;
+      panel.innerHTML = '<b>' + esc(g.t) + '</b>' +
+        (reading ? '<p class="statx-now">' + esc(reading) + '</p>' : '') +
+        '<p>' + esc(g.what) + '</p>' +
+        '<p class="statx-why"><b>Why it matters:</b> ' + esc(g.why) + '</p>' +
+        '<p class="statx-good"><b>Good looks like:</b> ' + esc(g.good) + '</p>' +
+        '<button class="mini statx-close">close</button>';
+      $(".statx-close", panel).addEventListener("click", function () {
+        panel.hidden = true; panel.innerHTML = "";
+        $$(".stat-x", host).forEach(function (b) { b.classList.remove("on"); });
+      });
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  });
 }
 function bar(k, v, note) {
   return '<div class="barrow"><span class="bk">' + esc(k) + '</span>' +
@@ -2560,6 +2705,70 @@ function renderSpots() {
   }
 }
 
+/* ── a recommendation for each beach, in words ──────────────────────────
+   A score of 41 means nothing to someone who has not spent a season reading
+   them. Each beach gets a sentence instead: go, go later, or do not bother —
+   and the reason, taken from whichever part of the score is actually letting
+   it down. */
+function spotAdvice(entry, sc) {
+  var spot = entry.spot;
+  var best = bestWindowForSpot(entry);
+  var now = sc.score;
+  var law = boardRule(spot, sc.date, sc.hour);
+
+  /* what is holding it back right now */
+  var parts = sc.parts, weakest = null;
+  ["size", "wind", "dir", "period", "tide"].forEach(function (k) {
+    if (!weakest || parts[k] < parts[weakest]) weakest = k;
+  });
+  var BLAME = {
+    size: "there is not enough swell reaching it",
+    wind: "the wind is wrong for it",
+    dir: "the swell is coming from the wrong angle to get in here",
+    period: "the swell is too short and gutless",
+    tide: "the tide is on the wrong half of the cycle for this beach"
+  };
+
+  /* Is it better later today than it is this minute? Saying "not today" when
+     the best window is three hours away is just wrong. */
+  var laterToday = best && best.date === sc.date && best.peak.hour > sc.hour &&
+                   best.peak.score >= Math.max(now + 10, 40);
+
+  var verdict, tone, why;
+  if (laterToday && now < 62) {
+    verdict = "Later today"; tone = "ok";
+    why = "Not much use this minute — " + BLAME[weakest] + " — but it comes good at " +
+          hhmm(best.from) + "–" + hhmm(best.to + 1) + ", scoring " + best.peak.score + ".";
+  } else if (law.restricted && now >= 46) {
+    verdict = "Not right now"; tone = "warn";
+    why = "It is working, but the towers are up and boards are out of the buoyed zone until " +
+          pad(GUARD_OFF) + ":00. Go early, go late, or walk past the buoys.";
+  } else if (now >= 62) {
+    verdict = "Go"; tone = "go";
+    why = "This is genuinely good right now — " + mtr(sc.localHs) + " with " + windLabel(sc, spot) + ".";
+  } else if (now >= 46) {
+    verdict = "Worth a look"; tone = "ok";
+    why = "Rideable rather than memorable. " + capitalise(BLAME[weakest]) + ", but you will catch waves.";
+  } else if (now >= 30) {
+    verdict = "Marginal"; tone = "meh";
+    why = capitalise(BLAME[weakest]) + ". Fine if you just want to be in the water.";
+  } else {
+    verdict = "Not today"; tone = "no";
+    why = capitalise(BLAME[weakest]) + ".";
+  }
+
+  var later = "";
+  if (laterToday) {
+    later = "";                                   /* already said in the verdict */
+  } else if (best && best.peak.score >= Math.max(now + 12, 40)) {
+    later = "Best window: " + dayLabel(best.date) + " " + hhmm(best.from) + "–" +
+      hhmm(best.to + 1) + ", scoring " + best.peak.score + ".";
+  } else if (best && best.peak.score < 30) {
+    later = "It does not come good at any point in the next " + DAYS + " days either.";
+  }
+  return { verdict: verdict, tone: tone, why: why, later: later, best: best };
+}
+
 var BBTAG = {
   open:     { t: "Boards OK year-round", c: "ok" },
   seasonal: { t: "Summer zone rule", c: "warn" }
@@ -2574,7 +2783,7 @@ function spotCard(entry, sc) {
     return "https://www.google.com/maps/dir/?api=1&destination=" + la + "," + lo + "&travelmode=driving";
   };
   var km = distanceFromMe(spot);
-  var best = bestWindowForSpot(entry);
+  var adv = spotAdvice(entry, sc);
 
   card.innerHTML =
     '<div class="spot-head">' +
@@ -2585,13 +2794,14 @@ function spotCard(entry, sc) {
         ' · ' + esc(spot.type) + ' · ' + esc(spot.level) + '</p></div>' +
       '<span class="bb bb-' + tag.c + '">' + tag.t + '</span>' +
     '</div>' +
-    (best
-      ? '<p class="spot-best"><b>Best in the next ' + DAYS + ' days:</b> ' + esc(dayLabel(best.date)) + ' ' +
-        hhmm(best.from) + '–' + hhmm(best.to + 1) + ' · <b>' + best.peak.score + '</b>/100 · ' +
-        esc(band(best.peak.score).word.toLowerCase()) + '</p>'
-      : '<p class="spot-best spot-best-none">Nothing rideable here in the next ' + DAYS + ' days.</p>') +
+    '<div class="verdict-box v-' + adv.tone + '">' +
+      '<b>' + esc(adv.verdict) + '</b>' +
+      '<p>' + esc(adv.why) + '</p>' +
+      (adv.later ? '<p class="verdict-later">' + esc(adv.later) + '</p>' : '') +
+    '</div>' +
     '<p class="spot-now">' + mtr(sc.localHs) + ' · ' + (sc.tp == null ? "—" : Math.round(sc.tp) + ' s') +
-      ' · ' + esc(windLabel(sc, spot)) + ' · tide ' + esc(tideLabel(sc.tide)) + ' · <b>' + b.word + '</b></p>' +
+      ' · ' + esc(windLabel(sc, spot)) + ' · tide ' + esc(tideLabel(sc.tide)) +
+      ' · <b>' + sc.score + '</b>/100</p>' +
     '<details><summary>Parking, rules, hazards</summary>' +
       '<div class="sec"><b class="lbl">Park here</b><p>' + esc(spot.park.name) + '</p>' +
         '<p class="foot">' + esc(spot.park.cost) + ' · ' + esc(spot.park.walk) + ' walk</p>' +
