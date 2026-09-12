@@ -1843,7 +1843,14 @@ function dayPut(date, d) {
     localStorage.setItem(DAY_KEY, JSON.stringify(all));
   } catch (e) { /* private mode */ }
 }
-var dayTried = {};
+/* In-flight requests by key. The page renders more than once around boot —
+   cached forecast first, live forecast a moment later — and the first
+   version of this threw the answer away if the box it was fetched for had
+   been rebuilt in the meantime, then refused to ask again. Now a second
+   render waits on the same request, and the answer goes into whichever box
+   is on screen when it lands. */
+var dayPending = {};
+var dayFailed = {};
 
 function renderHourCard(host) {
   var date = (S.sel && S.sel.key) ? S.sel.key.slice(0, 10) : madridToday();
@@ -1860,7 +1867,7 @@ function renderHourCard(host) {
 
   card.innerHTML = '<h3>' + esc(title) + '</h3>' +
     '<p class="foot">For each hour, the best beach you are allowed to ride at. Hours at the same beach are folded together.</p>' +
-    '<div class="dayread" id="dayRead"><span class="spinner sm"></span> Reading the day…</div>' +
+    '<div class="dayread" id="dayRead" data-key="' + esc(dayCacheKey(date)) + '"><span class="spinner sm"></span> Reading the day…</div>' +
     '<ol class="runs">' + plan.runs.map(function (run) {
       var col = scoreSolid(run.peak.score), b = band(run.peak.score);
       var span = run.from === run.to ? hhmm(run.from) : hhmm(run.from) + "–" + hhmm(run.to + 1);
@@ -1887,35 +1894,55 @@ function renderHourCard(host) {
 
 /* Claude turns the table into a paragraph. Cached three hours per
    (date, origin, drive, when) — the same key the Worker bounds itself on. */
+/* The box currently on screen for this key — not the one the request was
+   started from, which may have been rebuilt since. */
+function liveDayBox(k) {
+  var b = $("#dayRead");
+  return b && b.getAttribute("data-key") === k ? b : null;
+}
+
 function readTheDay(card, date, plan) {
   var box = $("#dayRead", card);
   var c = cfg();
   if (!c.api) { box.remove(); return; }
 
+  var k = dayCacheKey(date);
   var hit = dayGet(date);
   if (hit) { showDay(box, hit.text, hit.model, hit.at); return; }
+  if (dayFailed[k]) { box.remove(); return; }
 
-  var k = dayCacheKey(date);
-  if (dayTried[k]) { box.remove(); return; }
-  dayTried[k] = true;
+  /* Already asked from an earlier render: leave the spinner up and let that
+     request fill whichever box is on screen when it resolves. */
+  if (dayPending[k]) return;
 
   var rows = plan.hours.map(function (x) {
     return { h: x.h, name: x.spot.name, score: x.row.score, hs: +x.row.localHs.toFixed(1),
              wind: Math.round(x.row.wind || 0), windWord: windWordFor(x.row, x.spot) };
   }).slice(0, 18);
 
-  fetch(c.api + "/api/day", {
+  dayPending[k] = fetch(c.api + "/api/day", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ date: date, origin: S.origin, maxDrive: S.maxDrive, when: S.when, rows: rows })
   })
   .then(function (r) { return r.ok ? r.json() : null; })
   .then(function (d) {
-    if (!document.body.contains(box)) return;
-    if (d && d.text) { dayPut(date, d); showDay(box, d.text, d.model, Date.now()); }
-    else box.remove();
+    delete dayPending[k];
+    var target = liveDayBox(k);
+    if (d && d.text) {
+      dayPut(date, d);
+      if (target) showDay(target, d.text, d.model, Date.now());
+    } else {
+      dayFailed[k] = true;
+      if (target) target.remove();
+    }
   })
-  .catch(function () { if (document.body.contains(box)) box.remove(); });
+  .catch(function () {
+    delete dayPending[k];
+    dayFailed[k] = true;
+    var target = liveDayBox(k);
+    if (target) target.remove();
+  });
 }
 function showDay(box, text, model, at) {
   box.innerHTML = '<p>' + esc(text) + '</p>' +
