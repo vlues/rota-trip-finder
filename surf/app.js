@@ -1042,216 +1042,217 @@ function drawWave(cv, sc, spot) {
       foam = C("--foam", "#ffffff"), sky1 = C("--sky-1", "#B9DFF0"), sky2 = C("--sky-2", "#EEF7FB"),
       sand = C("--sand", "#E4D2AE"), inkc = C("--ink", "#0A1E29"), amber = C("--amber-b", "#D98C1F");
 
-  var hs = Math.max(sc.localHs || 0, 0.05);
+  var hs = Math.max(sc.localHs || 0, 0.02);
   var tp = clamp(sc.tp || 8, 4, 20);
   var t = (performance.now() - waveAnim.t0) / 1000;
 
-  /* ── layout ──
-     A single wave, drawn side on, moving right to left into a beach on the
-     right. One wave rather than a field of sine curves: it is a picture of
-     the thing you are about to ride, not a chart. */
-  var horizon = Math.round(H * 0.34);
-  var shore   = Math.round(H * 0.86);           /* where the sand meets water */
-  var beachX  = W * 0.80;
-  var pxM     = clamp((shore - horizon) * 0.52 / Math.max(1.0, hs * 1.7), 10, 80);
-  var faceH   = hs * pxM;                        /* the wave face, to scale */
+  /* ── bands ──────────────────────────────────────────────────────────
+     Fixed horizontal bands, so nothing ever lands on top of anything else:
+     a caption strip, then sky, then sea. The old version put a sun through
+     the middle of the text.                                              */
+  var capH    = 30;                                  /* caption only */
+  var horizon = Math.round(capH + (H - capH) * 0.20);
+  var baseY   = Math.round(H * 0.90);                /* the wave sits on this */
+  var shoreY  = baseY + 6;
+
+  /* The wave is the subject, so it is always framed to fill the picture —
+     a 0.3 m wave drawn honestly against a person is an invisible ripple and
+     tells you nothing. The ruler on the left carries the real scale instead,
+     the way a scale bar does on a micrograph. */
+  var faceH = (baseY - horizon) * 0.46;
+  var pxM   = faceH / hs;
+  var flatish = hs < 0.18;
 
   /* ── sky ── */
-  var sg = g.createLinearGradient(0, 0, 0, horizon);
+  var sg = g.createLinearGradient(0, capH, 0, horizon + 6);
   sg.addColorStop(0, sky1); sg.addColorStop(1, sky2);
-  g.fillStyle = sg; g.fillRect(0, 0, W, horizon);
+  g.fillStyle = sg; g.fillRect(0, 0, W, horizon + 6);
 
-  /* sun or moon, placed by where the sun actually is in the day */
-  var mins = sc.hour * 60;
-  var up = sc.sun.up, down = sc.sun.down;
+  /* sun, kept to the right half so it can never reach the caption */
+  var mins = sc.hour * 60, up = sc.sun.up, down = sc.sun.down;
   if (mins >= up - 40 && mins <= down + 40) {
     var f = clamp((mins - up) / Math.max(60, down - up), 0, 1);
-    var sx = W * (0.12 + f * 0.76);
-    var sy = horizon - 12 - Math.sin(f * Math.PI) * (horizon * 0.58);
-    g.beginPath(); g.arc(sx, sy, 13, 0, 6.283);
-    g.fillStyle = amber; g.globalAlpha = 0.85; g.fill(); g.globalAlpha = 1;
+    var sx = W * (0.52 + f * 0.40);
+    var sy = capH + 6 + (1 - Math.sin(f * Math.PI)) * (horizon - capH - 16);
+    g.beginPath(); g.arc(sx, sy, 11, 0, 6.283);
+    g.fillStyle = amber; g.globalAlpha = 0.9; g.fill(); g.globalAlpha = 1;
   }
 
-  /* cloud, as much of it as the forecast says */
+  /* cloud */
   var cover = clamp((sc.cloud == null ? 20 : sc.cloud) / 100, 0, 1);
-  if (cover > 0.12) {
-    g.fillStyle = foam; g.globalAlpha = 0.15 + cover * 0.5;
-    for (var ci = 0; ci < Math.round(cover * 5) + 1; ci++) {
-      var cx = ((ci * 137 + t * 3) % (W + 160)) - 80;
-      var cy = 14 + (ci % 3) * 17;
-      var cw = 40 + (ci % 4) * 22;
+  if (cover > 0.15) {
+    g.fillStyle = foam; g.globalAlpha = 0.2 + cover * 0.45;
+    for (var ci = 0; ci < Math.round(cover * 4) + 1; ci++) {
+      var cx = ((ci * 149 + t * 2.5) % (W + 200)) - 100;
+      var cy = capH + 8 + (ci % 2) * 14;
       g.beginPath();
-      g.ellipse(cx, cy, cw, 9 + (ci % 2) * 4, 0, 0, 6.283);
+      g.ellipse(cx, cy, 34 + (ci % 3) * 20, 7 + (ci % 2) * 3, 0, 0, 6.283);
       g.fill();
     }
     g.globalAlpha = 1;
   }
 
-  /* ── distant sea, flat to the horizon ── */
-  /* down to the bottom of the frame, not just to the shoreline — the beach
-     wedge is drawn over the top of it and only covers the right-hand side. */
+  /* ── sea ── */
   var og = g.createLinearGradient(0, horizon, 0, H);
   og.addColorStop(0, seaD); og.addColorStop(1, sea);
   g.fillStyle = og; g.fillRect(0, horizon, W, H - horizon);
 
-  /* a few distant swell lines, subtle and parallaxed */
+  /* distant swell lines */
   g.strokeStyle = foam; g.lineWidth = 1;
   for (var q = 0; q < 3; q++) {
-    var qy = horizon + (shore - horizon) * (0.10 + q * 0.10);
-    var drift = ((t * (6 + q * 5)) % 90) - 45;
-    g.globalAlpha = 0.10 + q * 0.05;
+    var qy = horizon + (baseY - horizon) * (0.09 + q * 0.11);
+    var drift = ((t * (5 + q * 4)) % 110) - 55;
+    g.globalAlpha = 0.09 + q * 0.04;
     g.beginPath();
-    for (var qx = -50; qx <= W; qx += 6) {
-      g.lineTo(qx, qy + Math.sin((qx + drift) / (34 + q * 10)) * (0.8 + q * 0.7));
+    for (var qx = -60; qx <= W; qx += 7) {
+      g.lineTo(qx, qy + Math.sin((qx + drift) / (38 + q * 12)) * (0.9 + q * 0.6));
     }
     g.stroke();
   }
   g.globalAlpha = 1;
 
-  /* ── the beach ── */
-  g.beginPath();
-  g.moveTo(beachX - faceH * 0.4, H);
-  g.quadraticCurveTo(beachX + 10, shore - 2, W, shore - (shore - horizon) * 0.14);
-  g.lineTo(W, H); g.closePath();
-  g.fillStyle = sand; g.fill();
-
-  /* ── the wave ──
-     Position cycles with the period, so a long-period swell visibly takes
-     longer between waves than a short one. */
-  var cycle = tp * 0.8;
-  var phase = (t % cycle) / cycle;               /* 0 = far out, 1 = on the sand */
-  var wx = W * 1.02 - phase * (W * 1.02 - beachX * 0.52);
-  var steep = clamp(phase * 1.35, 0, 1);         /* it stands up as it comes in */
-  var h = faceH * (0.55 + steep * 0.75);
-  var baseY = shore - 4;
-  var crestY = baseY - h;
-  var backW = h * 2.1 + 26;                      /* the shoulder behind it */
-  var lipX = wx - h * (0.10 + steep * 0.42);     /* the lip throws forward */
-
-  /* body of the wave: back shoulder, up to the crest, pitching face */
-  g.beginPath();
-  g.moveTo(wx + backW, baseY + 6);
-  g.quadraticCurveTo(wx + backW * 0.42, baseY - h * 0.30, wx, crestY);
-  g.quadraticCurveTo(lipX - h * 0.18, crestY + h * 0.06, lipX - h * 0.34, crestY + h * 0.34);
-  g.quadraticCurveTo(lipX - h * 0.16, crestY + h * 0.74, wx - h * 0.06, baseY + 6);
-  g.closePath();
-  var wg = g.createLinearGradient(0, crestY, 0, baseY + 6);
-  wg.addColorStop(0, sea); wg.addColorStop(1, seaD);
-  g.fillStyle = wg; g.fill();
-
-  /* the lip itself, bright where it catches the light */
-  g.beginPath();
-  g.moveTo(wx, crestY);
-  g.quadraticCurveTo(lipX - h * 0.18, crestY + h * 0.06, lipX - h * 0.34, crestY + h * 0.34);
-  g.strokeStyle = foam; g.lineWidth = Math.max(2, h * 0.14);
-  g.lineCap = "round"; g.globalAlpha = 0.92; g.stroke(); g.globalAlpha = 1;
-
-  /* whitewater once it is properly breaking */
-  if (steep > 0.55) {
-    g.fillStyle = foam;
-    var fa = clamp((steep - 0.55) / 0.45, 0, 1);
-    g.globalAlpha = 0.55 * fa;
-    g.beginPath();
-    g.ellipse(lipX - h * 0.30, crestY + h * 0.55, h * 0.42, h * 0.30, 0, 0, 6.283);
-    g.fill();
-    g.globalAlpha = 0.85 * fa;
-    g.beginPath();
-    g.ellipse(lipX - h * 0.12, crestY + h * 0.18, h * 0.22, h * 0.16, 0, 0, 6.283);
-    g.fill();
+  /* ── the wave ── */
+  if (flatish) {
+    /* Nothing worth drawing a wave for — say so rather than invent one. */
+    g.strokeStyle = foam; g.globalAlpha = 0.28; g.lineWidth = 1.4;
+    for (var fi = 0; fi < 3; fi++) {
+      var fy = baseY - 16 + fi * 11;
+      g.beginPath();
+      for (var fx = 0; fx <= W; fx += 6) {
+        g.lineTo(fx, fy + Math.sin((fx + t * 16 + fi * 30) / 24) * 1.6);
+      }
+      g.stroke();
+    }
     g.globalAlpha = 1;
+  } else {
+    /* One continuous sea surface with a peak travelling through it, rather
+       than a wave-shaped object floating on a flat plane. Nothing can drift
+       off the edge and leave a hard wedge behind, and the water always joins
+       up with itself. */
+    var cycle = tp * 0.85;
+    var phase = (t % cycle) / cycle;
+    var wx = W * 1.10 - phase * (W * 0.92);        /* crest stays on screen */
+    var steep = clamp(phase * 1.35, 0, 1);
+    /* Height is fixed at the forecast height so the crest always meets the
+       mark on the ruler; it is the shape that changes as it comes in, not
+       the size. A wave that grew and shrank under a fixed scale bar would
+       be lying about the one number the picture exists to convey. */
+    var h = faceH;
+    var width = h * 2.4 + 46;
+
+    /* the profile: a gaussian peak, squeezed on the shoreward side so the
+       face is steep and the back is a long shoulder, like a real wave */
+    var surface = function (x) {
+      var d = (x - wx) / width;
+      var k = d < 0 ? d * (1.35 + steep * 0.9) : d;
+      return baseY - h * Math.exp(-k * k * 1.9);
+    };
+
+    g.beginPath();
+    g.moveTo(-4, surface(-4));
+    for (var sx = -4; sx <= W + 4; sx += 3) g.lineTo(sx, surface(sx));
+    g.lineTo(W + 4, H); g.lineTo(-4, H); g.closePath();
+    var wg = g.createLinearGradient(0, baseY - h, 0, H);
+    wg.addColorStop(0, sea); wg.addColorStop(0.5, sea); wg.addColorStop(1, seaD);
+    g.fillStyle = wg; g.fill();
+
+    /* a soft highlight running down the face */
+    g.beginPath();
+    for (var hx = wx - width * 1.1; hx <= wx + width * 0.2; hx += 3) g.lineTo(hx, surface(hx) + h * 0.16);
+    g.strokeStyle = foam; g.globalAlpha = 0.09; g.lineWidth = Math.max(2, h * 0.11);
+    g.lineCap = "round"; g.stroke(); g.globalAlpha = 1;
+
+    /* the crest line, brightening as it stands up */
+    g.beginPath();
+    for (var cx2 = wx - width * 0.9; cx2 <= wx + width * 0.9; cx2 += 3) g.lineTo(cx2, surface(cx2));
+    g.strokeStyle = foam; g.globalAlpha = 0.22 + steep * 0.35;
+    g.lineWidth = 1.3 + steep * 1.1; g.stroke(); g.globalAlpha = 1;
+
+    /* the lip throwing forward once it is genuinely breaking */
+    if (steep > 0.45) {
+      var fa = clamp((steep - 0.45) / 0.55, 0, 1);
+      var ly = surface(wx);
+      g.strokeStyle = foam; g.lineCap = "round";
+      g.globalAlpha = 0.95 * fa; g.lineWidth = Math.max(2, h * 0.10);
+      g.beginPath();
+      g.moveTo(wx + width * 0.10, ly + h * 0.04);
+      g.quadraticCurveTo(wx - width * 0.16, ly - h * 0.05, wx - width * 0.34, ly + h * 0.30);
+      g.stroke();
+
+      g.fillStyle = foam;
+      g.globalAlpha = 0.38 * fa;
+      g.beginPath();
+      g.ellipse(wx - width * 0.30, ly + h * 0.46, width * 0.17, h * 0.17, 0, 0, 6.283);
+      g.fill();
+      g.globalAlpha = 1;
+    }
   }
 
-  /* soup sliding up the sand */
-  g.globalAlpha = 0.6; g.fillStyle = foam;
-  var run = Math.abs(Math.sin(t * 0.5)) * 26;
-  g.beginPath();
-  g.ellipse(beachX + run * 0.5, shore + 1, 44 + run, 4, 0, 0, 6.283);
-  g.fill(); g.globalAlpha = 1;
+  /* ── the scale ruler: what actually tells you the size ── */
+  drawRuler(g, 16, baseY, pxM, hs, inkc, foam);
 
-  /* ── the rider, prone on the board, on the face of the wave ── */
-  if (h > 22) drawRider(g, lipX - h * 0.52, crestY + h * 0.46, clamp(h * 0.30, 12, 34), inkc);
-  else drawStander(g, beachX + 22, shore - 2, 1.75 * pxM, inkc);
-
-  /* ── the only labels worth having ── */
-  g.font = '600 11px ui-monospace, "IBM Plex Mono", monospace';
+  /* ── caption strip, its own band, nothing else allowed in it ── */
+  g.fillStyle = C("--panel", "#fff");
+  g.globalAlpha = 0.0; g.fillRect(0, 0, W, capH); g.globalAlpha = 1;
   g.textAlign = "left";
-  g.fillStyle = inkc; g.globalAlpha = 0.7;
-  g.fillText(mtr(hs) + " · " + Math.round(tp) + " s apart", 12, horizon - 11);
+  g.font = '600 12.5px "IBM Plex Sans", system-ui, sans-serif';
+  g.fillStyle = inkc;
+  g.fillText(flatish ? "Flat" : mtr(hs), 14, 19);
+  g.font = '400 11px "IBM Plex Sans", system-ui, sans-serif';
+  g.globalAlpha = 0.62;
+  var cap = (sc.tp ? Math.round(sc.tp) + " s apart" : "");
   if (sc.wind != null && sc.windDir != null) {
     var offness = Math.cos(angDiff(sc.windDir, spot.off) * Math.PI / 180);
-    g.globalAlpha = 0.5;
-    g.fillText(Math.round(sc.wind) + " kn " + compass(sc.windDir) +
-      (offness > 0.28 ? " offshore" : offness < -0.28 ? " onshore" : " cross"), 12, horizon + 15);
-    /* one arrow, pointing the way the wind blows, rather than a drifting flock */
-    var dir = offness > 0 ? -1 : 1;
-    var ax = W - 58, ay = horizon + 11;
-    g.strokeStyle = inkc; g.globalAlpha = 0.4; g.lineWidth = 1.6;
-    g.beginPath(); g.moveTo(ax - dir * 18, ay); g.lineTo(ax + dir * 18, ay);
-    g.moveTo(ax + dir * 18, ay); g.lineTo(ax + dir * 11, ay - 5);
-    g.moveTo(ax + dir * 18, ay); g.lineTo(ax + dir * 11, ay + 5);
-    g.stroke();
+    cap += (cap ? "   ·   " : "") + Math.round(sc.wind) + " kn " +
+      (offness > 0.28 ? "offshore" : offness < -0.28 ? "onshore" : "cross-shore");
   }
+  g.fillText(cap, 14 + g.measureText(flatish ? "Flat" : mtr(hs)).width + 46, 19);
   g.globalAlpha = 1;
 
-  /* a one-metre rule against the wave, so the size is readable */
-  var rx = 30, rb = baseY, rt = rb - pxM;
-  g.strokeStyle = inkc; g.globalAlpha = 0.34; g.lineWidth = 1;
-  g.beginPath();
-  g.moveTo(rx - 5, rt); g.lineTo(rx + 5, rt);
-  g.moveTo(rx - 5, rb); g.lineTo(rx + 5, rb);
-  g.moveTo(rx, rt); g.lineTo(rx, rb);
-  g.stroke();
-  g.globalAlpha = 0.6;
-  g.font = '500 9.5px ui-monospace, "IBM Plex Mono", monospace';
-  g.fillText("1 m", rx + 8, (rt + rb) / 2 + 3);
-  g.globalAlpha = 1;
+  /* wind arrow, far right of the caption strip */
+  if (sc.wind != null && sc.windDir != null) {
+    var dir = Math.cos(angDiff(sc.windDir, spot.off) * Math.PI / 180) > 0 ? -1 : 1;
+    var ax = W - 30, ay = 15;
+    g.strokeStyle = inkc; g.globalAlpha = 0.45; g.lineWidth = 1.5; g.lineCap = "round";
+    g.beginPath();
+    g.moveTo(ax - dir * 13, ay); g.lineTo(ax + dir * 13, ay);
+    g.moveTo(ax + dir * 13, ay); g.lineTo(ax + dir * 7, ay - 4);
+    g.moveTo(ax + dir * 13, ay); g.lineTo(ax + dir * 7, ay + 4);
+    g.stroke(); g.globalAlpha = 1;
+  }
 }
 
-/* A bodyboarder, prone, board under the chest, angled down the line. */
-function drawRider(g, x, y, size, color) {
+/* A proper scale bar. It carries the real size, so the wave itself can be
+   drawn big enough to see whatever the forecast says. The ruler runs from the
+   trough to the crest and is labelled at the top, which is the one number
+   that ties the picture to the forecast. */
+function drawRuler(g, x, baseY, pxM, hs, ink, foam) {
+  var topY = baseY - hs * pxM;
+  /* a tick roughly every 25-40 px, rounded to something a person would say */
+  var raw = (baseY - topY) / 4 / pxM;
+  var nice = [0.1, 0.25, 0.5, 1, 2];
+  var step = nice[nice.length - 1];
+  for (var i = 0; i < nice.length; i++) { if (raw <= nice[i]) { step = nice[i]; break; } }
+
   g.save();
-  g.translate(x, y);
-  g.rotate(-0.28);
-  g.fillStyle = color;
-  g.globalAlpha = 0.9;
-  /* the board */
-  g.beginPath();
-  g.ellipse(0, size * 0.16, size * 0.62, size * 0.17, 0, 0, 6.283);
-  g.fill();
-  /* body lying on it */
-  g.beginPath();
-  g.ellipse(-size * 0.06, -size * 0.02, size * 0.44, size * 0.15, -0.06, 0, 6.283);
-  g.fill();
-  /* head */
-  g.beginPath();
-  g.arc(size * 0.40, -size * 0.16, size * 0.15, 0, 6.283);
-  g.fill();
-  /* trailing legs and fins */
-  g.strokeStyle = color; g.lineWidth = Math.max(1.6, size * 0.10); g.lineCap = "round";
-  g.beginPath();
-  g.moveTo(-size * 0.40, size * 0.02);
-  g.quadraticCurveTo(-size * 0.72, size * 0.14, -size * 0.92, size * 0.02);
-  g.stroke();
-  g.restore();
-}
+  g.lineCap = "butt";
+  g.strokeStyle = ink; g.globalAlpha = 0.34; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(x, baseY); g.lineTo(x, topY); g.stroke();
 
-/* When the wave is too small to ride, someone stands on the sand instead —
-   still 1.75 m, still the scale reference. */
-function drawStander(g, x, baseY, h, color) {
-  var u = h / 8;
-  g.save(); g.fillStyle = color; g.strokeStyle = color; g.globalAlpha = 0.78;
-  g.beginPath(); g.arc(x, baseY - h + u * 0.9, u * 0.8, 0, 6.283); g.fill();
-  g.lineWidth = Math.max(1.4, u * 0.7); g.lineCap = "round";
-  g.beginPath();
-  g.moveTo(x, baseY - h + u * 1.7); g.lineTo(x, baseY - h * 0.46);
-  g.moveTo(x, baseY - h * 0.46); g.lineTo(x - u * 0.6, baseY);
-  g.moveTo(x, baseY - h * 0.46); g.lineTo(x + u * 0.6, baseY);
-  g.moveTo(x, baseY - h * 0.80); g.lineTo(x - u * 1.2, baseY - h * 0.48);
-  g.stroke();
-  g.globalAlpha = 0.55;
-  g.beginPath();
-  g.ellipse(x - u * 1.45, baseY - h * 0.42, u * 0.40, u * 1.45, -0.2, 0, 6.283);
-  g.fill();
+  for (var v = step; v < hs - 0.001; v += step) {
+    var y = baseY - v * pxM;
+    g.beginPath(); g.moveTo(x - 3, y); g.lineTo(x + 3, y); g.stroke();
+  }
+  /* foot */
+  g.beginPath(); g.moveTo(x - 5, baseY); g.lineTo(x + 5, baseY); g.stroke();
+
+  /* the crest, called out */
+  g.globalAlpha = 0.95; g.strokeStyle = foam; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(x - 6, topY); g.lineTo(x + 6, topY); g.stroke();
+  g.font = '600 10px ui-monospace, "IBM Plex Mono", monospace';
+  g.textAlign = "left";
+  g.fillStyle = foam; g.globalAlpha = 0.95;
+  g.fillText(mtr(hs), x + 10, topY + 3.5);
   g.restore();
 }
 
@@ -2776,6 +2777,32 @@ function spotAdvice(entry, sc) {
   return { verdict: verdict, tone: tone, why: why, later: later, best: best };
 }
 
+/* ── where the parking claim comes from ─────────────────────────────────
+   The description beside it is mine. This line is not: it is a car park
+   that is actually mapped on the ground, with whatever the map records
+   about it, and it is what the directions link points at. Saying which is
+   which matters more than sounding confident about both. */
+function parkingProof(spot) {
+  var o = spot.park.osm;
+  if (!o) {
+    return '<p class="proof proof-none">No car park is mapped at this beach, so the pin below is my own ' +
+      'estimate from the access road rather than a surveyed one. Expect to park on the verge.</p>';
+  }
+  var bits = [];
+  if (o.fee === "no") bits.push("free");
+  else if (o.fee === "yes") bits.push("charges a fee");
+  if (o.capacity) bits.push("about " + o.capacity + " spaces");
+  if (o.surface === "unpaved" || o.surface === "ground" || o.surface === "dirt") bits.push("unsurfaced");
+  else if (o.surface === "asphalt" || o.surface === "concrete") bits.push("surfaced");
+
+  return '<p class="proof"><b>✓ Verified</b> — ' +
+    (o.name ? esc(o.name) + ', ' : "a public car park ") +
+    o.m + ' m from the water' + (bits.length ? ', ' + esc(bits.join(", ")) : "") + '. ' +
+    (o.near > 1 ? o.near + ' car parks are mapped within 900 m of this beach; this is the closest usable one. ' : "") +
+    '<em>Source: OpenStreetMap, checked ' + esc(PARK_CHECKED) + '.</em></p>';
+}
+var PARK_CHECKED = "12 September 2026";
+
 var BBTAG = {
   open:     { t: "Boards OK year-round", c: "ok" },
   seasonal: { t: "Summer zone rule", c: "warn" }
@@ -2813,9 +2840,16 @@ function spotCard(entry, sc) {
       '<div class="sec"><b class="lbl">Park here</b><p>' + esc(spot.park.name) + '</p>' +
         '<p class="foot">' + esc(spot.park.cost) + ' · ' + esc(spot.park.walk) + ' walk</p>' +
         '<p>' + esc(spot.park.note) + '</p>' +
-        '<p><a class="link" target="_blank" rel="noopener" href="' + mapsTo(spot.park.lat, spot.park.lon) + '">Drive to the car park ↗</a>' +
+        parkingProof(spot) +
+        '<p><a class="link" target="_blank" rel="noopener" href="' +
+          mapsTo(spot.park.osm ? spot.park.osm.lat : spot.park.lat,
+                 spot.park.osm ? spot.park.osm.lon : spot.park.lon) + '">Drive to the car park ↗</a>' +
         ' · <a class="link" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + spot.lat + ',' + spot.lon + '">See the break ↗</a></p></div>' +
-      '<div class="sec"><b class="lbl">Bodyboarding</b><p>' + esc(spot.bb.rule) + '</p></div>' +
+      '<div class="sec"><b class="lbl">Bodyboarding</b><p>' + esc(spot.bb.rule) + '</p>' +
+        '<p class="proof proof-none">Basis: ' + esc(spot.bb.basis || "local practice") + '. Beach ordinances are ' +
+        're-issued most springs and each town words its own differently, so this is the shape of the rule ' +
+        'rather than a quotation. The flag flying on the day is the authority, and the Live check reads ' +
+        'what is true this week.</p></div>' +
       '<div class="sec"><b class="lbl">Watch out for</b><ul>' +
         spot.hazards.map(function (h) { return '<li>' + esc(h) + '</li>'; }).join("") + '</ul></div>' +
       (spot.kit && spot.kit.length ? '<div class="sec"><b class="lbl">Bring</b><p>' + esc(spot.kit.join(" · ")) + '</p></div>' : "") +

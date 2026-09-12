@@ -30,10 +30,11 @@ window.__SURF_SPOTS__ = [
   pmin: 7, tide: "mid", shore: true, level: "beginner", drive: 5,
   hazards: ["Swimmers and paddleboards all summer", "Groynes at the south end"],
   bb: {
-    ok: true, status: "seasonal",
+    ok: true, status: "seasonal", basis: "Rota town beach ordinance",
     rule: "Boards are out of the buoyed bathing zone from 15 Jun–15 Sep while lifeguards are on (roughly 11:00–20:00). Dawn and after the towers close are fine, and the season rule lifts entirely the rest of the year."
   },
   park: {
+    osm: { lat: 36.61876, lon: -6.35757, m: 423, name: "Aparcamiento Público La Merced", fee: "yes", near: 5 },
     name: "Plaza Bartolomé Pérez underground + Av. de la Marina street",
     lat: 36.6167, lon: -6.3579, free: true, cost: "Street free · underground ~€1.20/h",
     walk: "2–4 min", note: "Street parking behind the paseo is gone by 10:00 in July and August; the underground car park almost always has space and puts you 200 m from the sand."
@@ -55,10 +56,11 @@ window.__SURF_SPOTS__ = [
     "Shallow on anything under mid tide"
   ],
   bb: {
-    ok: true, status: "open",
+    ok: true, status: "open", basis: "outside any buoyed bathing zone",
     rule: "Outside the main bathing zone, so no seasonal board ban. Normal flag rules still apply — red flag means nobody goes in, board or not."
   },
   park: {
+    osm: { lat: 36.6389, lon: -6.39171, m: 53, fee: "no", near: 22 },
     name: "Dirt pull-off at Punta Candor, off the A-2077 coast road",
     lat: 36.6377, lon: -6.3888, free: true, cost: "Free",
     walk: "5 min through the pines", note: "Unsurfaced and rutted — fine for a normal car in summer, puddled and soft after winter rain. Nothing is watched here, so leave nothing visible in the boot."
@@ -75,8 +77,9 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand over rock patches", best: { min: 0.7, max: 1.9, ideal: 1.2 },
   pmin: 8, tide: "mid", shore: true, level: "intermediate", drive: 13,
   hazards: ["Rock patches uncovered at low tide", "Rips beside the rock outcrops"],
-  bb: { ok: true, status: "open", rule: "Quiet stretch with no buoyed bathing corridor for most of its length — boards are fine. Lifeguarded section in high summer follows the usual 15 Jun–15 Sep zone rule." },
+  bb: { ok: true, status: "open", basis: "outside any buoyed bathing zone", rule: "Quiet stretch with no buoyed bathing corridor for most of its length — boards are fine. Lifeguarded section in high summer follows the usual 15 Jun–15 Sep zone rule." },
   park: {
+    osm: { lat: 36.62872, lon: -6.38289, m: 503, fee: "no", surface: "concrete", near: 11 },
     name: "Sandy lot at the end of the Aguadulce access track",
     lat: 36.6315, lon: -6.3757, free: true, cost: "Free", walk: "3 min",
     note: "Small — maybe twenty cars. Empty outside July/August. Soft sand at the edges; stay on the packed line."
@@ -93,8 +96,9 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand", best: { min: 0.7, max: 2.0, ideal: 1.2 },
   pmin: 8, tide: "all", shore: true, level: "beginner", drive: 16,
   hazards: ["Strong rips at the north end on bigger days", "Long walk back if the current pushes you"],
-  bb: { ok: true, status: "seasonal", rule: "Lifeguarded and buoyed in front of the main access points 15 Jun–15 Sep; walk two minutes up the beach and you are outside the zone. Off-season it is unrestricted." },
+  bb: { ok: true, status: "seasonal", basis: "Rota town beach ordinance", rule: "Lifeguarded and buoyed in front of the main access points 15 Jun–15 Sep; walk two minutes up the beach and you are outside the zone. Off-season it is unrestricted." },
   park: {
+    osm: { lat: 36.68851, lon: -6.41725, m: 843, fee: "no", surface: "asphalt", near: 23 },
     name: "Pine-shaded lots off the Costa Ballena access roads",
     lat: 36.6816, lon: -6.4137, free: true, cost: "Free", walk: "4–6 min over the boardwalk",
     note: "Genuinely big, genuinely free, and shaded by umbrella pines — the most civilised car park on this list. Multiple entrances; the northern ones are quieter."
@@ -113,8 +117,9 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand and rock", best: { min: 0.6, max: 1.8, ideal: 1.1 },
   pmin: 7, tide: "mid", shore: true, level: "intermediate", drive: 22,
   hazards: ["Rock ledges through the middle of the beach", "Shallow at low water"],
-  bb: { ok: true, status: "open", rule: "Outside the town bathing zones. Boards fine; the ordinance bans them only inside the marked swimming areas in season." },
+  bb: { ok: true, status: "open", basis: "outside the town's buoyed zones", rule: "Outside the town bathing zones. Boards fine; the ordinance bans them only inside the marked swimming areas in season." },
   park: {
+    osm: { lat: 36.69275, lon: -6.42117, m: 409, near: 9 },
     name: "Street parking along the Tres Piedras seafront",
     lat: 36.6953, lon: -6.4224, free: true, cost: "Free", walk: "1–3 min",
     note: "Ordinary residential street parking — easy nine months of the year, tight in August. No lot, so park considerately."
@@ -131,8 +136,9 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand with rock outcrops", best: { min: 0.9, max: 2.2, ideal: 1.4 },
   pmin: 8, tide: "mid", shore: true, level: "intermediate", drive: 22,
   hazards: ["Rock outcrops at both ends", "Cliff steps — slippery when wet"],
-  bb: { ok: true, status: "seasonal", rule: "Small coves with buoyed swim zones in summer. Early morning or out of season and there is no issue." },
+  bb: { ok: true, status: "seasonal", basis: "El Puerto town beach ordinance", rule: "Small coves with buoyed swim zones in summer. Early morning or out of season and there is no issue." },
   park: {
+    osm: { lat: 36.61208, lon: -6.28016, m: 588, near: 10 },
     name: "Street parking in the Fuentebravía urbanización",
     lat: 36.6107, lon: -6.2839, free: true, cost: "Free", walk: "3–5 min plus steps down",
     note: "Residential streets above the cliff. There is no real car park — you park on the road and walk down. Do not block the private driveways; they do get towed."
@@ -149,8 +155,9 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand", best: { min: 1.0, max: 2.3, ideal: 1.5 },
   pmin: 8, tide: "mid", shore: true, level: "beginner", drive: 24,
   hazards: ["Gets crowded with swimmers", "Shallow sandbars"],
-  bb: { ok: true, status: "seasonal", rule: "Urban lifeguarded beach — boards out of the buoyed zone 15 Jun–15 Sep during tower hours." },
+  bb: { ok: true, status: "seasonal", basis: "El Puerto town beach ordinance", rule: "Urban lifeguarded beach — boards out of the buoyed zone 15 Jun–15 Sep during tower hours." },
   park: {
+    osm: { lat: 36.59785, lon: -6.27395, m: 250, fee: "yes", near: 7 },
     name: "Lot by the Castillo de Santa Catalina",
     lat: 36.5963, lon: -6.2718, free: true, cost: "Free", walk: "2 min",
     note: "Decent-sized free lot next to the fort. Fills on summer weekends but turns over quickly."
@@ -169,8 +176,9 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand", best: { min: 0.8, max: 2.2, ideal: 1.3 },
   pmin: 8, tide: "mid", shore: true, level: "beginner", drive: 38,
   hazards: ["Very busy in summer", "Rips beside the groynes"],
-  bb: { ok: true, status: "seasonal", rule: "Cádiz runs a proper municipal beach ordinance: no boards inside the buoyed bathing zone in season during lifeguard hours, with marked entry corridors at some access points. Early mornings are the accepted window." },
+  bb: { ok: true, status: "seasonal", basis: "Cádiz municipal beach ordinance", rule: "Cádiz runs a proper municipal beach ordinance: no boards inside the buoyed bathing zone in season during lifeguard hours, with marked entry corridors at some access points. Early mornings are the accepted window." },
   park: {
+    osm: { lat: 36.50185, lon: -6.27386, m: 685, name: "Parking Dia", fee: "yes", near: 20 },
     name: "Blue-zone street parking on Paseo Marítimo",
     lat: 36.5075, lon: -6.2775, free: false, cost: "Paid blue zone ~€1/h, free 14:00–16:30 and after 21:00",
     walk: "1 min", note: "Pay-and-display along the whole seafront. If you want free, drive on to Cortadura — three minutes further and the lot there costs nothing."
@@ -187,8 +195,9 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand", best: { min: 0.8, max: 2.4, ideal: 1.4 },
   pmin: 8, tide: "low", shore: true, level: "intermediate", drive: 40,
   hazards: ["Strong rips — it is an open, unsheltered beach", "Very few people around out of season"],
-  bb: { ok: true, status: "open", rule: "Largely unbuilt and only lifeguarded in part, so boards are fine along most of its length year-round." },
+  bb: { ok: true, status: "open", basis: "largely unlifeguarded, no buoyed zone", rule: "Largely unbuilt and only lifeguarded in part, so boards are fine along most of its length year-round." },
   park: {
+    osm: { lat: 36.49453, lon: -6.26922, m: 778, fee: "no", capacity: 200, near: 11 },
     name: "Free lots along the Cortadura seafront, off the N-443",
     lat: 36.4892, lon: -6.2657, free: true, cost: "Free", walk: "2 min over the dune boardwalk",
     note: "Long strip of free lots with space even in August. This is the best free parking anywhere on the Cádiz isthmus."
@@ -205,8 +214,9 @@ window.__SURF_SPOTS__ = [
   type: "small bay", bottom: "sand between two forts", best: { min: 1.4, max: 3.0, ideal: 2.0 },
   pmin: 9, tide: "high", shore: true, level: "beginner", drive: 45,
   hazards: ["Rocks either side", "Only works when everywhere else is far too big"],
-  bb: { ok: true, status: "seasonal", rule: "Tiny, extremely popular town beach. In season it is swimmers only inside the buoys — this is a winter-storm spot, not a summer one." },
+  bb: { ok: true, status: "seasonal", basis: "Cádiz municipal beach ordinance", rule: "Tiny, extremely popular town beach. In season it is swimmers only inside the buoys — this is a winter-storm spot, not a summer one." },
   park: {
+    osm: { lat: 36.53621, lon: -6.30412, m: 743, name: "Parking Santa Bárbara", fee: "yes", capacity: 800, near: 15 },
     name: "Campo del Sur street parking / Plaza San Antonio area",
     lat: 36.5286, lon: -6.3013, free: false, cost: "Blue zone, difficult", walk: "5–10 min",
     note: "Old-town parking is genuinely hard. Honestly: park at the Canalejas underground and walk, or take the Rota catamaran and walk from the terminal."
@@ -225,8 +235,9 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand", best: { min: 0.7, max: 2.2, ideal: 1.3 },
   pmin: 8, tide: "mid", shore: true, level: "beginner", drive: 48,
   hazards: ["Rips between sandbars", "Long beach — note where you parked"],
-  bb: { ok: true, status: "seasonal", rule: "Chiclana buoys off the developed sections in summer. The southern end towards the Torre del Puerco is wilder and unrestricted." },
+  bb: { ok: true, status: "seasonal", basis: "Chiclana town beach ordinance", rule: "Chiclana buoys off the developed sections in summer. The southern end towards the Torre del Puerco is wilder and unrestricted." },
   park: {
+    osm: { lat: 36.3411, lon: -6.15991, m: 676, name: "Aparcamiento verano", near: 7 },
     name: "Sector 5 / Torre del Puerco lots, Novo Sancti Petri",
     lat: 36.3325, lon: -6.164, free: true, cost: "Free (some paid overflow in August)", walk: "3–5 min",
     note: "Big sandy lots at the southern accesses. The southern end is both the better wave and the easier parking — drive past the hotels."
@@ -243,8 +254,9 @@ window.__SURF_SPOTS__ = [
   type: "beach break with reef", bottom: "sand over rock", best: { min: 0.7, max: 2.2, ideal: 1.3 },
   pmin: 8, tide: "mid", shore: true, level: "intermediate", drive: 62,
   hazards: ["Rock reef at low tide", "Cliff steps down to the cove"],
-  bb: { ok: true, status: "open", rule: "Cliff-backed coves outside Conil's main buoyed beach — no seasonal board ban in practice." },
+  bb: { ok: true, status: "open", basis: "cliff coves outside the buoyed zone", rule: "Cliff-backed coves outside Conil's main buoyed beach — no seasonal board ban in practice." },
   park: {
+    osm: { lat: 36.29079, lon: -6.109, m: 102, fee: "no", surface: "unpaved", near: 6 },
     name: "Cliff-top lots at Fuente del Gallo",
     lat: 36.2909, lon: -6.1072, free: true, cost: "Free", walk: "4 min plus a staircase",
     note: "Gravel lots on the clifftop. Fine outside August; in August Conil is chaos and you want to arrive before 10:00."
@@ -262,10 +274,11 @@ window.__SURF_SPOTS__ = [
   pmin: 7, tide: "low", shore: true, level: "all", drive: 72,
   hazards: ["Rips on bigger days", "Crowded peaks in summer", "Closes out over about 2.5 m"],
   bb: {
-    ok: true, status: "open",
+    ok: true, status: "open", basis: "Vejer town zoning — surf corridors in season",
     rule: "The region's surf beach — boards are the point here. In high summer the town marks swimming zones and surf corridors; stay out of the flagged swim areas and there is no issue at all."
   },
   park: {
+    osm: { lat: 36.2293, lon: -6.06795, m: 471, fee: "yes", surface: "unpaved", near: 4 },
     name: "Dirt strip along the A-2233 beach road",
     lat: 36.2261, lon: -6.064, free: true, cost: "Free, though attendants ask €3–5 in summer",
     walk: "1–2 min", note: "Kilometres of roadside dirt parking right behind the beach — you can check the waves from the car. In July and August informal attendants wave you into spaces for a few euros; it is not official, and it is easier to just pay it."
@@ -286,8 +299,9 @@ window.__SURF_SPOTS__ = [
     "Only worth the drive when it is big",
     "Strong current around the Trafalgar tombolo"
   ],
-  bb: { ok: true, status: "open", rule: "Wild, cliff-backed and mostly unlifeguarded. No board restrictions; the constraint is the reef, not the ordinance." },
+  bb: { ok: true, status: "open", basis: "unlifeguarded, no buoyed zone", rule: "Wild, cliff-backed and mostly unlifeguarded. No board restrictions; the constraint is the reef, not the ordinance." },
   park: {
+    osm: { lat: 36.18842, lon: -6.02695, m: 627, near: 7 },
     name: "Roadside along the Caños seafront and the Faro de Trafalgar track",
     lat: 36.1867, lon: -6.0316, free: true, cost: "Free", walk: "2–8 min depending where you squeeze in",
     note: "Narrow village road with no real lot. Arrive early on a good swell or you will be walking fifteen minutes. The Trafalgar lighthouse track has more space."
@@ -304,7 +318,7 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand", best: { min: 1.0, max: 2.6, ideal: 1.6 },
   pmin: 9, tide: "mid", shore: true, level: "intermediate", drive: 96,
   hazards: ["Very exposed to Levante — it gets sandblasted", "Rips"],
-  bb: { ok: true, status: "seasonal", rule: "Buoyed zone in front of the village in summer; the beach runs for kilometres and the rest is open." },
+  bb: { ok: true, status: "seasonal", basis: "Barbate town beach ordinance", rule: "Buoyed zone in front of the village in summer; the beach runs for kilometres and the rest is open." },
   park: {
     name: "Lots at the village entrance and along the Atlanterra road",
     lat: 36.1561, lon: -5.8685, free: true, cost: "Free", walk: "3–6 min",
@@ -322,8 +336,9 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand", best: { min: 1.2, max: 3.0, ideal: 1.8 },
   pmin: 9, tide: "mid", shore: true, level: "intermediate", drive: 108,
   hazards: ["Wind", "Remote — no services out of season"],
-  bb: { ok: true, status: "open", rule: "Natural park beach, no board restrictions. Roman ruins at the back have their own opening hours if you want to combine the trip." },
+  bb: { ok: true, status: "open", basis: "natural park beach, no buoyed zone", rule: "Natural park beach, no board restrictions. Roman ruins at the back have their own opening hours if you want to combine the trip." },
   park: {
+    osm: { lat: 36.08075, lon: -5.75919, m: 461, fee: "yes", surface: "unpaved", near: 8 },
     name: "Lot at the Baelo Claudia end of the Bolonia access road",
     lat: 36.0841, lon: -5.7633, free: true, cost: "Free", walk: "3 min",
     note: "Sandy lots behind the dune. Fine except at the very peak of August."
@@ -340,7 +355,7 @@ window.__SURF_SPOTS__ = [
   type: "beach break", bottom: "sand", best: { min: 1.0, max: 2.8, ideal: 1.6 },
   pmin: 8, tide: "mid", shore: true, level: "intermediate", drive: 115,
   hazards: ["Kitesurfers — a lot of them, moving fast", "The windiest beach in Europe, more or less"],
-  bb: { ok: true, status: "open", rule: "Shared with kite and windsurf schools, which have their own marked launch corridors. Stay clear of the kite zones and there is no restriction on bodyboarding." },
+  bb: { ok: true, status: "open", basis: "kite and windsurf zoning rather than a bathing ordinance", rule: "Shared with kite and windsurf schools, which have their own marked launch corridors. Stay clear of the kite zones and there is no restriction on bodyboarding." },
   park: {
     name: "Los Lances Norte lot, off the N-340",
     lat: 36.0278, lon: -5.6255, free: true, cost: "Free", walk: "5 min over the boardwalk",
@@ -349,6 +364,206 @@ window.__SURF_SPOTS__ = [
   kit: ["Eyes up for kite lines"],
   why: "Included for completeness and for the days when the whole Atlantic coast is blown out by Poniente — Tarifa's beach is sheltered from the west and can be glassy when Rota is a mess.",
   tip: "Two hours each way. Only worth it if the wind map says Poniente everywhere and Tarifa is the one green patch.",
+  crowd: "Kite-heavy"
+},
+
+/* ══════════ added after the first seventeen — every one geocoded, its
+   facing derived from the terrain rather than remembered, and its car park
+   taken from what is actually mapped on the ground ══════════ */
+{
+  id: "rompidillo", name: "Playa del Rompidillo", town: "Rota", zone: "Rota",
+  lat: 36.6207, lon: -6.3558, mlat: 36.5804, mlon: -6.3602,
+  face: 185, win: [130, 250], off: 5, exposure: 0.14,
+  type: "sheltered beach", bottom: "sand and rock", best: { min: 1.4, max: 3.0, ideal: 2.0 },
+  pmin: 10, tide: "high", shore: false, level: "beginner", drive: 5,
+  hazards: ["Rock shelf at low water", "Harbour traffic at the eastern end"],
+  bb: { ok: true, status: "seasonal", basis: "Rota town beach ordinance",
+    rule: "Town beach with a buoyed swimming zone in season. Rarely any point bringing a board anyway." },
+  park: {
+    osm: { lat: 36.61876, lon: -6.35757, m: 267, name: "Aparcamiento Público La Merced", fee: "yes", near: 6 }, name: "Street parking behind the seafront", lat: 36.6220, lon: -6.3540, free: true,
+    cost: "Free", walk: "2 min", note: "Ordinary town streets. Easy most of the year." },
+  kit: ["Low expectations"],
+  why: "The sheltered beach back by the harbour, tucked in behind the point and facing south into the bay. Listed because people confuse it with Punta Candor, which is the opposite corner of Rota and a completely different proposition.",
+  tip: "It needs a genuinely big southwesterly to show anything at all. Nine days in ten it is a swimming beach, and that is what it is for.",
+  crowd: "Locals and families"
+},
+{
+  id: "regla", name: "Playa de Regla", town: "Chipiona", zone: "Costa Noroeste",
+  lat: 36.7290, lon: -6.4396, mlat: 36.7255, mlon: -6.4899,
+  face: 265, win: [225, 320], off: 85, exposure: 0.60,
+  type: "beach break", bottom: "sand over rock ledges", best: { min: 0.7, max: 1.9, ideal: 1.2 },
+  pmin: 8, tide: "mid", shore: true, level: "beginner", drive: 21,
+  hazards: ["Rock ledges uncovered at low water", "Busy in front of the town in summer"],
+  bb: { ok: true, status: "seasonal", basis: "Chipiona town beach ordinance",
+    rule: "The main town beach, buoyed and lifeguarded in season. Walk north past the sanctuary and you are outside the zone." },
+  park: {
+    osm: { lat: 36.73268, lon: -6.43655, m: 491, surface: "unpaved", near: 4 }, name: "Seafront street parking by the Santuario de Regla", lat: 36.7300, lon: -6.4370, free: true,
+    cost: "Free", walk: "2–4 min", note: "Plenty outside August; the whole town parks here in summer." },
+  kit: ["Booties for the ledges"],
+  why: "Chipiona's town beach, right under the sanctuary. It sits further out into the Atlantic than anything in Rota, so it picks up swell on days Rota is dead flat.",
+  tip: "Come here when the chart says NW — that is the direction Rota's beaches cannot see and this one can.",
+  crowd: "Busy in summer"
+},
+{
+  id: "jara", name: "Playa de la Jara", town: "Sanlúcar de Barrameda", zone: "Costa Noroeste",
+  lat: 36.7726, lon: -6.3792, mlat: 36.7864, mlon: -6.4267,
+  face: 290, win: [255, 330], off: 110, exposure: 0.42,
+  type: "beach break", bottom: "sand, shifting banks", best: { min: 0.9, max: 2.2, ideal: 1.4 },
+  pmin: 9, tide: "mid", shore: true, level: "intermediate", drive: 34,
+  hazards: [
+    "Guadalquivir river mouth — strong tidal streams and shifting banks",
+    "Water is often silty and brown after rain, which is the river, not pollution"
+  ],
+  bb: { ok: true, status: "seasonal", basis: "Sanlúcar town beach ordinance",
+    rule: "Lifeguarded and buoyed in front of the town in season; La Jara runs on well past that." },
+  park: {
+    osm: { lat: 36.77218, lon: -6.37772, m: 140, fee: "no", near: 5 }, name: "Street parking along the Paseo Marítimo at La Jara", lat: 36.7740, lon: -6.3770, free: true,
+    cost: "Free", walk: "2 min", note: "Long seafront with room. August and the Sanlúcar horse races are the exceptions." },
+  kit: ["Fin tethers — the river moves water"],
+  why: "The last beach before the Guadalquivir empties into the Atlantic, facing almost due west. It needs a solid NW swell, and when it gets one the banks can be very good.",
+  tip: "Tidal streams off the river mouth are serious. Fish the middle of the tide and stay well south of the channel.",
+  crowd: "Light"
+},
+{
+  id: "valdelagrana", name: "Playa de Valdelagrana", town: "El Puerto de Santa María", zone: "Bay of Cádiz",
+  lat: 36.5738, lon: -6.2253, mlat: 36.5536, mlon: -6.2689,
+  face: 240, win: [215, 270], off: 60, exposure: 0.20,
+  type: "beach break", bottom: "sand", best: { min: 1.6, max: 3.2, ideal: 2.2 },
+  pmin: 10, tide: "mid", shore: true, level: "beginner", drive: 27,
+  hazards: ["Almost always flat", "Very shallow gradient — long walk out"],
+  bb: { ok: true, status: "seasonal", basis: "El Puerto town beach ordinance",
+    rule: "Urban beach, buoyed and lifeguarded in season." },
+  park: {
+    osm: { lat: 36.57397, lon: -6.22332, m: 178, near: 56 }, name: "Paseo Marítimo de Valdelagrana", lat: 36.5750, lon: -6.2235, free: true,
+    cost: "Free", walk: "1–3 min", note: "Big free seafront parking — the easiest on this list." },
+  kit: [],
+  why: "Deep inside the Bay of Cádiz with a 70° window of open water and a very shallow gradient. Included so you can see for yourself why the bay beaches do not work, rather than driving there to find out.",
+  tip: "If this one is breaking, the whole coast is enormous and you should be somewhere sheltered.",
+  crowd: "Busy, mostly walkers"
+},
+{
+  id: "santamaria", name: "Santa María del Mar", town: "Cádiz", zone: "Cádiz",
+  lat: 36.5202, lon: -6.2868, mlat: 36.5031, mlon: -6.3324,
+  face: 245, win: [200, 300], off: 65, exposure: 0.48,
+  type: "beach break", bottom: "sand between rock groynes", best: { min: 0.8, max: 2.1, ideal: 1.3 },
+  pmin: 8, tide: "mid", shore: true, level: "beginner", drive: 40,
+  hazards: ["Rock groynes at both ends", "Small beach, gets crowded"],
+  bb: { ok: true, status: "seasonal", basis: "Cádiz municipal beach ordinance",
+    rule: "Cádiz runs a proper ordinance with marked zones. Out of tower hours and out of season it is unrestricted." },
+  park: {
+    osm: { lat: 36.52795, lon: -6.2878, m: 866, name: "Plaza de Sevilla (zona naranja)", fee: "yes", surface: "asphalt", near: 10 }, name: "Blue-zone street parking on Paseo Marítimo", lat: 36.5215, lon: -6.2850, free: false,
+    cost: "Paid blue zone", walk: "1–2 min", note: "Paid on-street. Cortadura is fifteen minutes further and free." },
+  kit: ["Coins for the meter"],
+  why: "The small beach between Victoria and La Caleta, sheltered by its groynes. Works on the same swells as Victoria but holds shape in a bit more wind.",
+  tip: "A good fallback when Victoria is too crowded or too windswept — the groynes tidy it up.",
+  crowd: "Busy"
+},
+{
+  id: "camposoto", name: "Playa de Camposoto", town: "San Fernando", zone: "Bay of Cádiz",
+  lat: 36.4112, lon: -6.2215, mlat: 36.3973, mlon: -6.2687,
+  face: 250, win: [200, 320], off: 70, exposure: 0.62,
+  type: "beach break", bottom: "sand", best: { min: 0.7, max: 2.2, ideal: 1.3 },
+  pmin: 8, tide: "low", shore: true, level: "intermediate", drive: 50,
+  hazards: [
+    "A military firing range closes the southern end at times — obey the signs and the red flags",
+    "Strong rips on the outer bars",
+    "Very few people at the far end out of season"
+  ],
+  bb: { ok: true, status: "open", basis: "natural park beach, lifeguarded only at the near end",
+    rule: "Mostly undeveloped natural park beach. Boards unrestricted along almost all of it." },
+  park: {
+    osm: { lat: 36.41791, lon: -6.22313, m: 760, near: 1 }, name: "Free lots at the Camposoto beach accesses", lat: 36.4125, lon: -6.2195, free: true,
+    cost: "Free", walk: "3–6 min over the dune", note: "Several numbered accesses, each with its own free lot. The higher-numbered ones are quieter." },
+  kit: ["Fin tethers", "Water — there is nothing at the far end"],
+  why: "A long, wild, dune-backed beach on the open Atlantic side of the San Fernando isthmus. More exposure than anything in the bay and far emptier than Cádiz.",
+  tip: "Low tide, and walk south past the last access. The bars out there are the best of it.",
+  crowd: "Light"
+},
+{
+  id: "sanctipetri", name: "Playa de Sancti Petri", town: "Chiclana", zone: "Costa de la Luz",
+  lat: 36.3858, lon: -6.2079, mlat: 36.3572, mlon: -6.2434,
+  face: 225, win: [180, 290], off: 45, exposure: 0.58,
+  type: "beach break", bottom: "sand", best: { min: 0.8, max: 2.2, ideal: 1.4 },
+  pmin: 8, tide: "mid", shore: true, level: "beginner", drive: 52,
+  hazards: ["Tidal channel behind the castle island — strong flow", "Boat traffic to the island"],
+  bb: { ok: true, status: "seasonal", basis: "Chiclana town beach ordinance",
+    rule: "Lifeguarded in front of the resort in season. The northern end towards the channel is quieter and unbuoyed." },
+  park: {
+    osm: { lat: 36.38563, lon: -6.205, m: 261, name: "Parking gratuito Sancti Petri", near: 5 }, name: "Lots behind the Sancti Petri marina and the beach accesses", lat: 36.3872, lon: -6.2060, free: true,
+    cost: "Free", walk: "4 min", note: "Resort parking, generally easy outside August." },
+  kit: [],
+  why: "The northern end of the Barrosa sand, under the old castle on its island. Slightly more sheltered than La Barrosa proper, which makes it the better call when it is windy.",
+  tip: "Stay well clear of the channel between the beach and the castle — the tide runs hard through it.",
+  crowd: "Moderate"
+},
+{
+  id: "fontanilla", name: "Playa de la Fontanilla", town: "Conil de la Frontera", zone: "Costa de la Luz",
+  lat: 36.2807, lon: -6.0999, mlat: 36.2547, mlon: -6.1383,
+  face: 230, win: [185, 295], off: 50, exposure: 0.72,
+  type: "beach break", bottom: "sand", best: { min: 0.7, max: 2.2, ideal: 1.3 },
+  pmin: 8, tide: "mid", shore: true, level: "beginner", drive: 58,
+  hazards: ["The busiest beach in Conil in summer", "Rips between the bars"],
+  bb: { ok: true, status: "seasonal", basis: "Conil town beach ordinance",
+    rule: "Conil's main beach — buoyed and lifeguarded in season, with the usual board restriction inside the zone during tower hours." },
+  park: {
+    osm: { lat: 36.28194, lon: -6.09975, m: 139, name: "Playa La Fontanilla", fee: "no", near: 7 }, name: "Free lots above the Fontanilla beach access", lat: 36.2820, lon: -6.0975, free: true,
+    cost: "Free", walk: "3–5 min", note: "Big gravel lots on the cliff above the beach. Full by mid-morning in August, empty the rest of the year." },
+  kit: [],
+  why: "The wide main beach of Conil, straightforward sand with no rock to worry about — the easiest introduction to the good half of this coast. There is a live camera pointed at it, so you can see it before you drive.",
+  tip: "If you want to know what El Palmar is doing and cannot see a camera there, look at this one. It is four kilometres up the same stretch of sand.",
+  crowd: "Busy in summer"
+},
+{
+  id: "castilnovo", name: "Playa de Castilnovo", town: "Conil de la Frontera", zone: "Costa de la Luz",
+  lat: 36.2570, lon: -6.0842, mlat: 36.2338, mlon: -6.1253,
+  face: 235, win: [185, 300], off: 55, exposure: 0.80,
+  type: "beach break", bottom: "sand", best: { min: 0.6, max: 2.3, ideal: 1.3 },
+  pmin: 7, tide: "low", shore: true, level: "intermediate", drive: 62,
+  hazards: ["Almost no lifeguard cover", "Rips", "No services at all"],
+  bb: { ok: true, status: "open", basis: "undeveloped beach, no buoyed zone",
+    rule: "Wild, undeveloped and unbuoyed. No board restriction at any time of year." },
+  park: { name: "Dirt pull-offs along the Castilnovo track", lat: 36.2585, lon: -6.0820, free: true,
+    cost: "Free", walk: "3–8 min", note: "Unsurfaced track behind the dunes with informal pull-offs. Fine in a normal car in summer; soft and rutted after rain." },
+  kit: ["Fin tethers", "Everything you need — there is nothing there"],
+  why: "The empty stretch between Conil and El Palmar, backed by dunes and an old tower with no development at all. Nearly the same exposure as El Palmar with a fraction of the people.",
+  tip: "This is where to go when El Palmar is good but packed. Same swell, same sand, ten minutes further and nobody on it.",
+  crowd: "Empty"
+},
+{
+  id: "zahora", name: "Playa de Zahora", town: "Barbate", zone: "Costa de la Luz",
+  lat: 36.1917, lon: -6.0395, mlat: 36.1746, mlon: -6.0849,
+  face: 245, win: [195, 310], off: 65, exposure: 0.86,
+  type: "beach break", bottom: "sand with rock patches", best: { min: 0.6, max: 2.4, ideal: 1.3 },
+  pmin: 7, tide: "low", shore: true, level: "intermediate", drive: 78,
+  hazards: ["Rock patches at the southern end near Trafalgar", "Rips on bigger days"],
+  bb: { ok: true, status: "open", basis: "scattered development, no buoyed zone along most of it",
+    rule: "Largely unbuoyed. Boards fine year-round along most of its length." },
+  park: {
+    osm: { lat: 36.1976, lon: -6.0379, m: 672, near: 3 }, name: "Dirt pull-offs along the Zahora beach tracks", lat: 36.1930, lon: -6.0375, free: true,
+    cost: "Free", walk: "2–5 min", note: "Sandy tracks off the main road with room to pull off. Easier than El Palmar for space." },
+  kit: ["Fin tethers", "Booties if you go near the Trafalgar end"],
+  why: "The long open sand immediately north of Cape Trafalgar, and the best-exposed beach on this whole list after El Palmar. It faces the same swell and is usually quieter.",
+  tip: "The natural pairing with Los Caños: Zahora for the open swell, and when the west wind ruins it, drive five minutes round the cape to Caños where that same wind is offshore.",
+  crowd: "Light"
+},
+{
+  id: "valdevaqueros", name: "Playa de Valdevaqueros", town: "Tarifa", zone: "Strait",
+  lat: 36.0631, lon: -5.6795, mlat: 36.0240, mlon: -5.6925,
+  face: 195, win: [150, 250], off: 15, exposure: 0.44,
+  type: "beach break", bottom: "sand", best: { min: 1.0, max: 2.8, ideal: 1.7 },
+  pmin: 9, tide: "mid", shore: true, level: "intermediate", drive: 112,
+  hazards: [
+    "Kitesurfers in large numbers — this is one of the busiest kite beaches in Europe",
+    "The wind here is on a different scale to the rest of this list"
+  ],
+  bb: { ok: true, status: "open", basis: "kite and windsurf zoning rather than a bathing ordinance",
+    rule: "Shared with kite and windsurf schools that have marked launch corridors. No board restriction; just stay out of the kite zones." },
+  park: {
+    osm: { lat: 36.06866, lon: -5.68448, m: 763, name: "Parking Bilbo Tarifa", fee: "yes", near: 12 }, name: "Lots behind the Valdevaqueros dune", lat: 36.0645, lon: -5.6775, free: true,
+    cost: "Free, some paid overflow in August", walk: "3–5 min", note: "Large sandy lots serving the kite beach. Busy from mid-morning when the wind fills in." },
+  kit: ["Eyes up for kite lines at all times"],
+  why: "The big bay under the Valdevaqueros dune, facing south into the Strait. Included for the same reason as Los Lances: when Poniente has flattened the entire Atlantic coast, this side can be clean.",
+  tip: "Two hours each way, so only when the wind map shows the whole Atlantic coast blown out and Tarifa as the one calm patch. Then it is worth it.",
   crowd: "Kite-heavy"
 }
 ];

@@ -579,11 +579,15 @@ If the web gives you nothing recent for a line, say what is normally true for th
    what anyone posts. Without it, varying the name would bust the cache and
    the bill would be open-ended. */
 const SURF_BEACHES = new Set([
-  'Playa de la Costilla', 'Punta Candor', 'Playa de Aguadulce', 'Playa de la Ballena',
-  'Playa de las Tres Piedras', 'Fuentebravía / La Muralla', 'Playa de Santa Catalina',
-  'Playa de la Victoria', 'Playa de Cortadura', 'La Caleta', 'Playa de la Barrosa',
-  'El Roqueo / Fuente del Gallo', 'Playa de El Palmar', 'Los Caños de Meca',
-  'Playa de Zahara de los Atunes', 'Playa de Bolonia', 'Playa de Los Lances',
+  "Playa de la Costilla", "Punta Candor", "Playa de Aguadulce", "Playa de la Ballena",
+  "Playa de las Tres Piedras", "Fuentebravía / La Muralla", "Playa de Santa Catalina",
+  "Playa de la Victoria", "Playa de Cortadura", "La Caleta", "Playa de la Barrosa",
+  "El Roqueo / Fuente del Gallo", "Playa de El Palmar", "Los Caños de Meca",
+  "Playa de Zahara de los Atunes", "Playa de Bolonia", "Playa de Los Lances",
+  "Playa del Rompidillo", "Playa de Regla", "Playa de la Jara", "Playa de Valdelagrana",
+  "Santa María del Mar", "Playa de Camposoto", "Playa de Sancti Petri",
+  "Playa de la Fontanilla", "Playa de Castilnovo", "Playa de Zahora",
+  "Playa de Valdevaqueros",
 ]);
 
 const SURF_SYSTEM = `You are the live-intel card inside "Rota Wave Watch", used by a bodyboarder driving out from Rota, Spain to a named beach on the Cádiz coast.
