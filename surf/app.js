@@ -61,6 +61,22 @@ var MDATE = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", mo
 var MTIME = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour12: false, hour: "2-digit", minute: "2-digit" });
 function madridNowKey() { return MDATE.format(new Date()) + "T" + MTIME.format(new Date()).slice(0, 2) + ":00"; }
 function madridToday() { return MDATE.format(new Date()); }
+/* The first hour still worth talking about on a given day: right now for
+   today (an hour in progress counts), midnight for any other day. Every
+   "best hour today" must go through this, or at four in the afternoon the
+   site recommends eight in the morning. */
+function hourFloor(date) {
+  return date === madridToday() ? +MTIME.format(new Date()).slice(0, 2) : 0;
+}
+/* Can you be in the water at this beach during this hour, starting now?
+   Any other day, yes. Today, only if now plus the drive lands inside the
+   hour — a beach two hours away is not an answer for "this afternoon". */
+function reachable(spot, date, hour) {
+  if (date !== madridToday()) return true;
+  var tm = MTIME.format(new Date());
+  var nowMin = +tm.slice(0, 2) * 60 + +tm.slice(3, 5);
+  return hour * 60 + 59 >= nowMin + driveMin(spot);
+}
 
 /* The API hands back local wall-clock strings with no offset. Parse them as
    plain labels rather than as instants — no Date maths, no DST surprises. */
@@ -1699,9 +1715,14 @@ function renderTodayCard(host) {
   var date = (S.sel && S.sel.key) ? S.sel.key.slice(0, 10) : madridToday();
   var isToday = date === madridToday();
   var plan = hourlyPlan(date);
+  var rolled = false;
+  if (isToday && !plan.runs.length && S.model.days[1]) {
+    /* Nothing left of today: the useful answer is tomorrow, said as such. */
+    date = S.model.days[1]; plan = hourlyPlan(date); rolled = true;
+  }
   var lr = bestLearnToday(date);
   var card = el("section", "card today");
-  var html = '<h3>' + (isToday ? "Today" : esc(dayLabel(date))) + '</h3>';
+  var html = '<h3>' + (rolled ? "Today is done — tomorrow" : isToday ? "Today" : esc(dayLabel(date))) + '</h3>';
 
   /* the beginner line first: one sentence, one button */
   if (lr && lr.pick.L.score >= 55) {
@@ -1729,7 +1750,7 @@ function renderTodayCard(host) {
 
   if (plan.runs.length) {
     html += '<div class="dayread" id="dayRead" data-key="' + esc(dayCacheKey(date)) + '"><span class="spinner sm"></span> Reading the day…</div>' +
-      '<span class="lbl runs-lbl">hour by hour · best legal beach</span>' +
+      '<span class="lbl runs-lbl">' + (isToday && !rolled ? "from now, hour by hour" : "hour by hour") + ' · best legal beach</span>' +
       '<ol class="runs">' + plan.runs.map(function (run) {
         var col = scoreSolid(run.peak.score), b = band(run.peak.score);
         var span = run.from === run.to ? hhmm(run.from) : hhmm(run.from) + "–" + hhmm(run.to + 1);
@@ -1774,6 +1795,7 @@ function bestLegalAt(key) {
   spotsInRange().forEach(function (e) {
     var r = rowAt(e, key);
     if (!r || r.dark) return;
+    if (!reachable(e.spot, p.date, p.hour)) return;
     if (boardRule(e.spot, p.date, p.hour).restricted) return;
     if (!best || r.score > best.row.score) best = { entry: e, row: r };
   });
@@ -1789,7 +1811,7 @@ function windWordFor(r, spot) {
 
 function hourlyPlan(date) {
   var hours = [];
-  for (var h = 0; h < 24; h++) {
+  for (var h = hourFloor(date); h < 24; h++) {
     var key = date + "T" + pad(h) + ":00";
     if (S.model.hours.indexOf(key) < 0) continue;
     var b = bestLegalAt(key);
@@ -2979,11 +3001,14 @@ function learnScore(entry, sc) {
 /* The best hour to have a first go, today, at a beach you can drive to. */
 function bestLearnToday(date) {
   var day = date || madridToday();
+  var floorH = hourFloor(day), wt = whenTest();
   var best = null;
   spotsInRange().forEach(function (e) {
     var spot = e.spot;
     e.rows.forEach(function (r) {
-      if (r.date !== day || r.dark) return;
+      if (r.date !== day || r.dark || r.hour < floorH) return;
+      if (!reachable(spot, day, r.hour)) return;              /* drive time included */
+      if (wt && !wt(r)) return;                                /* the part of the day you can go */
       if (boardRule(spot, day, r.hour).restricted) return;   /* has to be legal */
       var L = learnScore(e, r);
       /* A first lesson is an hour in the whitewater, not a swell chase, so
@@ -3001,7 +3026,8 @@ function bestLearnToday(date) {
   best.entry.rows.forEach(function (r) { if (r.date === day) byHour[r.hour] = r; });
   var holds = function (h) {
     var r = byHour[h];
-    return r && !r.dark && !boardRule(best.spot, day, h).restricted &&
+    return r && !r.dark && h >= floorH && reachable(best.spot, day, h) && !(wt && !wt(r)) &&
+           !boardRule(best.spot, day, h).restricted &&
            learnScore(best.entry, r).score >= floor;
   };
   /* Cap it: on a uniformly mediocre day the run would otherwise stretch
@@ -3015,7 +3041,9 @@ function bestLearnToday(date) {
   spotsInRange().forEach(function (e) {
     if (driveMin(e.spot) > 25) return;
     e.rows.forEach(function (r) {
-      if (r.date !== day || r.dark) return;
+      if (r.date !== day || r.dark || r.hour < floorH) return;
+      if (!reachable(e.spot, day, r.hour)) return;
+      if (wt && !wt(r)) return;
       if (boardRule(e.spot, day, r.hour).restricted) return;
       var L = learnScore(e, r);
       if (!nearBest || L.score > nearBest.score) nearBest = { score: L.score, spot: e.spot, row: r };
@@ -3057,7 +3085,8 @@ function learnWhy(lr) {
          "underneath you on a first go. It is here because nothing better is working.";
   }
   if (p.level < 60) {
-    s += " It is also not a beginner's beach by reputation.";
+    s += " It is rated " + esc0(spot.level) + " rather than beginner, so stay in the foam" +
+         " — it is the pick because nothing gentler has a wave today.";
   }
   return s;
 }
@@ -3691,4 +3720,10 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 
+
+/* A handle for checking the arithmetic from the console. Nothing on the
+   page uses it. */
+window.__rw = { S: S, learnScore: learnScore, bestLearnToday: bestLearnToday, nextLearnDay: nextLearnDay,
+  learnWhy: learnWhy, ripRisk: ripRisk, boardRule: boardRule, driveMin: driveMin, windWordFor: windWordFor,
+  madridToday: madridToday, scoreHour: scoreHour, MTIME: MTIME };
 })();
