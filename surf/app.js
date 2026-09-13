@@ -1847,6 +1847,12 @@ function liveDayBox(k) {
   return b && b.getAttribute("data-key") === k ? b : null;
 }
 
+var NO_CREDIT = "Claude is switched off: the API account behind the Worker is out of credit. " +
+  "Top it up at console.anthropic.com (Plans & Billing) and this comes back on its own";
+function outOfCredit(d) {
+  return !!(d && typeof d.error === "string" && /credit balance/i.test(d.error));
+}
+
 function readTheDay(card, date, plan) {
   var box = $("#dayRead", card);
   var c = cfg();
@@ -1871,7 +1877,7 @@ function readTheDay(card, date, plan) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ date: date, origin: S.origin, maxDrive: S.maxDrive, when: S.when, rows: rows })
   })
-  .then(function (r) { return r.ok ? r.json() : null; })
+  .then(function (r) { return r.json().catch(function () { return null; }); })
   .then(function (d) {
     delete dayPending[k];
     var target = liveDayBox(k);
@@ -1880,7 +1886,10 @@ function readTheDay(card, date, plan) {
       if (target) showDay(target, d.text, d.model, Date.now());
     } else {
       dayFailed[k] = true;
-      if (target) target.remove();
+      /* Silence is fine for a passing outage; the one failure worth naming
+         is the account being empty, because only a person can fix that. */
+      if (target && outOfCredit(d)) target.innerHTML = '<p class="foot">' + NO_CREDIT + '.</p>';
+      else if (target) target.remove();
     }
   })
   .catch(function () {
@@ -2682,7 +2691,11 @@ function askIntel(card, spot, sc) {
   })
   .then(function (r) {
     if (r.status === 401) throw new Error("the Worker wants its access code");
-    if (!r.ok) throw new Error("the Worker answered " + r.status);
+    if (!r.ok) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        throw new Error(outOfCredit(d) ? NO_CREDIT : "the Worker answered " + r.status);
+      });
+    }
     return r.json();
   }, function () {
     /* fetch() rejects with a bare "Failed to fetch" for DNS, CORS, a wrong
