@@ -881,7 +881,7 @@ function dayRowHtml(d) {
 var S = {
   model: null,
   spotId: null,        /* null = "pick the best one for me" */
-  maxDrive: 999,
+  maxDrive: 45,                         /* a lesson is not a road trip; widen it if you want */
   view: "now",
   sel: null,           /* {spotId, key} chosen from the grid or chart */
   filters: { boards: false, beginner: false, freePark: false, noRocks: false },
@@ -3523,6 +3523,8 @@ function renderHeader() {
   if (sel) sel.value = S.spotId || "";
   var org2 = $("#originSel");
   if (org2) org2.value = S.origin;
+  var drv2 = $("#driveSel");
+  if (drv2) drv2.value = String(S.maxDrive);
 
   var when = $("#whenBar");
   if (when) {
@@ -3669,6 +3671,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var drv = $("#driveSel");
   if (drv) drv.addEventListener("change", function () {
     S.maxDrive = +drv.value || 999;
+    try { localStorage.setItem("rotasurf.drive", String(S.maxDrive)); } catch (e) {}
     if (S.spotId) {
       var still = S.model && spotsInRange().some(function (e) { return e.spot.id === S.spotId; });
       if (!still) S.spotId = null;
@@ -3692,6 +3695,8 @@ document.addEventListener("DOMContentLoaded", function () {
     var o = localStorage.getItem("rotasurf.origin");
     /* "me" needs a fresh fix each session, so it is not restored. */
     if (o === "town" || o === "base") S.origin = o;
+    var dl = +localStorage.getItem("rotasurf.drive");
+    if ([20, 45, 75, 999].indexOf(dl) >= 0) S.maxDrive = dl;
   } catch (e) { /* private mode */ }
 
   try {
