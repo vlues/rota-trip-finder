@@ -820,7 +820,7 @@ function dayRowHtml(d) {
 
   var chip = function (k, v) { return v ? '<span><em>' + esc(k) + '</em>' + esc(v) + '</span>' : ""; };
 
-  return '<details class="day' + (r.score >= S.bar ? " day-hit" : "") + '"' + (isToday ? " open" : "") + '>' +
+  return '<details class="day' + (r.score >= S.bar ? " day-hit" : "") + '">' +
     '<summary>' +
       '<span class="day-score" style="background:' + col.bg + ';color:' + col.ink + '">' + r.score + '</span>' +
       '<span class="day-main"><b>' + esc(dayLabel(d.date)) + ' · ' + range + '</b>' +
@@ -1441,9 +1441,8 @@ function confBadge(c) {
 
 function renderNow() {
   var host = $("#v-now"); host.innerHTML = "";
+  renderTodayCard(host);
   renderPlanCard(host);
-  renderLearnCard(host);
-  renderHourCard(host);
   var pick = currentPick();
   if (!pick) { host.appendChild(el("p", "empty", "No forecast for this hour.")); return; }
   var sc = pick.row, spot = pick.entry.spot, b = band(sc.score);
@@ -1478,93 +1477,24 @@ function renderNow() {
       '<span class="chip">Water ' + (sc.sst == null ? "—" : r1(sc.sst) + " °C") + '</span>' +
     '</div>' +
     '<div class="wavebox"><canvas id="waveCv"></canvas></div>';
+  /* the four numbers that decide a session, on the hero itself */
+  var suit = suitFor(sc.sst);
+  hero.innerHTML +=
+    '<div class="keys">' +
+      '<span><em>wave</em><b>' + mtr(sc.localHs) + '</b></span>' +
+      '<span><em>wind</em><b>' + esc(windWordFor(sc, spot)) + (sc.wind == null ? "" : " " + Math.round(sc.wind) + " kn") + '</b></span>' +
+      '<span><em>tide</em><b>' + esc(tideLabel(sc.tide)) + '</b></span>' +
+      '<span><em>water</em><b>' + (sc.sst == null ? "—" : r1(sc.sst) + " °C") + '</b></span>' +
+    '</div>' +
+    (spot.level === "advanced"
+      ? '<p class="hero-warn">Not a learning beach: ' + esc(spot.type) + '. ' + esc(spot.hazards[0]) + '.</p>'
+      : '');
   host.appendChild(hero);
 
-  /* ── the numbers ── */
-  var stats = el("section", "card");
-  var suit = suitFor(sc.sst);
-  stats.innerHTML =
-    '<div class="stats">' +
-      stat("Wave", mtr(sc.localHs), "at the beach · " + mtr(sc.offshoreHs) + " offshore", "wave") +
-      stat("Period", (sc.tp == null ? "—" : Math.round(sc.tp) + " s"), sc.tp >= 11 ? "groundswell — real power" : sc.tp >= 8 ? "decent push" : "short, weak chop", "period") +
-      stat("Swell from", sc.swellDir == null ? "—" : compass(sc.swellDir) + " " + Math.round(sc.swellDir) + "°", sc.offBy > 0 ? Math.round(sc.offBy) + "° outside this beach's window" : "straight into the window", "wave") +
-      stat("Wind", windLabel(sc, spot), sc.gust != null ? "gusting " + Math.round(sc.gust) + " kn" : "", "windangle") +
-      stat("Water", sc.sst == null ? "—" : r1(sc.sst) + " °C", suit.suit, "water") +
-      stat("Tide", tideLabel(sc.tide), nx.length
-        ? nx.map(function (t) { return t.type + " " + t.at + " (" + (t.m >= 0 ? "+" : "") + r1(t.m) + " m)"; }).join(" · ")
-        : r1(sc.tide.m) + " m", "tidestate") +
-      stat("Air", sc.airT == null ? "—" : Math.round(sc.airT) + " °C",
-        (sc.feelsT != null ? "feels like " + Math.round(sc.feelsT) + " °C" : "") +
-        (sc.uv != null ? " · UV " + Math.round(sc.uv) : ""), "feels") +
-      stat("Sky", cloudWord(sc), (sc.rainP ? sc.rainP + "% chance of rain" : "no rain expected"), "uv") +
-      stat("Visibility", visWord(sc), sc.vis == null ? "" : Math.round(sc.vis / 1000) + " km — matters at dawn", "vis") +
-      stat("Current", sc.curV == null ? "—" : r1(sc.curV) + " m/s",
-        sc.curV == null ? "" : (sc.curV < 0.25 ? "you will not feel it" : "it will drift you along the beach") +
-          (sc.curDir != null ? ", setting " + compass(sc.curDir) : ""), "current") +
-      stat("Pressure", sc.pressure == null ? "—" : Math.round(sc.pressure) + " hPa", pressureWord(sc), "pressure") +
-      stat("Daylight", hhmm(Math.floor(sc.sun.up / 60)) + "–" + hhmm(Math.floor(sc.sun.down / 60)), sc.dark ? "dark right now" : "", "light") +
-    '</div>' +
-    '<div class="statx" hidden></div>' +
-    '<p class="foot stat-hint">Tap any of those to find out what it is and what today\'s number means.</p>' +
-    '<div class="dialrow">' + compassSVG(sc, spot) +
-      '<div class="diallegend">' +
-        '<p><i class="k-swell"></i> swell in from ' + (sc.swellDir == null ? "—" : compass(sc.swellDir)) + '</p>' +
-        '<p><i class="k-wind"></i> wind from ' + (sc.windDir == null ? "—" : compass(sc.windDir)) + '</p>' +
-        '<p><i class="k-face"></i> beach faces ' + compass(spot.face) + '</p>' +
-        '<p><i class="k-win"></i> swell window that reaches here</p>' +
-      '</div>' +
-    '</div>';
-  host.appendChild(stats);
-  wireStats(stats, sc, spot);
-
-  /* ── why that score ── */
-  var why = el("section", "card");
-  var P = sc.parts;
-  why.innerHTML = '<h3>Why ' + sc.score + '</h3>' +
-    '<div class="bars">' +
-      bar("Size", P.size, mtr(sc.localHs) + " vs a " + spot.best.min + "–" + spot.best.max + " m sweet spot") +
-      bar("Wind", P.wind, windLabel(sc, spot)) +
-      bar("Swell direction", P.dir, sc.offBy > 0 ? Math.round(sc.offBy) + "° off the window" : "inside the window") +
-      bar("Period", P.period, (sc.tp == null ? "—" : Math.round(sc.tp) + " s") + " · needs " + spot.pmin + " s+") +
-      bar("Tide", P.tide, tideLabel(sc.tide) + " · wants " + spot.tide) +
-    '</div>' +
-    '<p class="foot">' + confBadge(conf) + ' — ' + esc(conf.why) +
-      (conf.lead > 0 ? ", " + conf.lead + " h ahead" : "") + '.</p>';
-  host.appendChild(why);
-
-  /* ── what the sea is actually made of ── */
-  if (sc.swellH != null || sc.windWaveH != null) {
-    var sea = el("section", "card");
-    var swH = sc.swellH || 0, wwH = sc.windWaveH || 0, tot = Math.max(swH + wwH, 0.01);
-    var read = swH >= wwH * 2 && (sc.swellT || 0) >= 10
-      ? "Proper groundswell. Organised lines with real power behind them — this is what you want."
-      : swH >= wwH * 1.3
-        ? "Mostly swell, with some wind chop sitting on top of it. Workable."
-        : wwH > swH
-          ? "Mostly local wind chop rather than swell: short, disorganised and gutless. The wave height number flatters it."
-          : "An even mix of swell and wind chop — bumpy, but there is something underneath.";
-    sea.innerHTML = '<h3>What the sea is made of</h3>' +
-      '<div class="mix"><span class="mix-sw" style="width:' + r1(swH / tot * 100) + '%"></span>' +
-      '<span class="mix-ww" style="width:' + r1(wwH / tot * 100) + '%"></span></div>' +
-      '<div class="mixkey">' +
-        '<span><i class="mix-sw"></i>groundswell ' + r1(swH) + ' m' +
-          (sc.swellT ? ' at ' + Math.round(sc.swellT) + ' s' : '') + '</span>' +
-        '<span><i class="mix-ww"></i>wind chop ' + r1(wwH) + ' m' +
-          (sc.windWaveT ? ' at ' + Math.round(sc.windWaveT) + ' s' : '') + '</span>' +
-      '</div>' +
-      '<p class="foot">' + esc(read) + '</p>';
-    host.appendChild(sea);
-  }
-
-  /* ── the day on one bar ── */
-  var tl = el("section", "card");
-  tl.innerHTML = '<h3>' + esc(dayLabel(sc.date)) + ' at a glance</h3>' +
-    dayTimeline(pick.entry, spot, sc.date, sc.sun);
-  host.appendChild(tl);
-
-  /* ── can I actually go in, and what is the water doing ── */
+  /* ── can I go in, what is the water doing, what to wear ── */
   var safety = el("section", "card");
   var dayTides = tidesOn(pick.entry, sc.date);
+  var kit = kitFor(sc, spot);
   safety.innerHTML = '<h3>Before you go in</h3>' +
     '<div class="law law-' + law.tone + '"><b>' + (law.restricted ? "Boards restricted right now" : "Boards are fine right now") + '</b>' +
       '<p>' + esc(law.text) + '</p></div>' +
@@ -1578,32 +1508,15 @@ function renderNow() {
             (t.type === "high" ? "▲" : "▼") + ' <b>' + t.at + '</b> <em>' +
             (t.m >= 0 ? "+" : "") + r1(t.m) + ' m</em></span>';
         }).join("") + '</div>' +
-        '<p class="foot">Heights are against mean sea level, so a negative number is simply below the daily average — the gap between a high and the next low is the range that matters. This beach works best on the <b>' + esc(spot.tide) + '</b> tide.</p></div>'
-      : "");
-  host.appendChild(safety);
-
-  /* ── the one thing the models cannot tell you ── */
-  renderIntelCard(host, spot, sc);
-
-  /* ── what to bring ── */
-  var kit = kitFor(sc, spot);
-  var gear = el("section", "card");
-  gear.innerHTML = '<h3>What to bring</h3>' +
+        '<p class="foot">This beach works best on the <b>' + esc(spot.tide) + '</b> tide.</p></div>'
+      : "") +
     '<div class="suit"><span class="suiticon">' + suit.icon + '</span><div><b>' + esc(suit.suit) + '</b>' +
-      '<p>' + esc(suit.extra) + '</p>' +
-      '<p class="foot">Water is ' + (sc.sst == null ? "—" : r1(sc.sst) + " °C") + ' right now.</p></div></div>' +
-    '<ul class="kit">' + kit.map(function (k) {
-      return '<li><b>' + esc(k.label) + '</b><span>' + esc(k.why) + '</span></li>';
-    }).join("") + '</ul>';
-  host.appendChild(gear);
-
-  /* ── the wind story ── */
-  var L = loreFor(sc.windDir);
-  if (L) {
-    var lore = el("section", "card lore " + (L.good ? "lore-good" : "lore-bad"));
-    lore.innerHTML = '<h3>' + esc(L.t) + '</h3><p>' + esc(L.d) + '</p>';
-    host.appendChild(lore);
-  }
+      '<p>' + esc(kit.map(function (k) { return k.label; }).join(" · ")) + '</p></div></div>' +
+    '<p class="foot">Flags, water quality and jellyfish today are on the <button class="linkbtn" data-view="live">Live tab</button>.</p>';
+  host.appendChild(safety);
+  $$(".linkbtn", safety).forEach(function (bt) {
+    bt.addEventListener("click", function () { setView(bt.getAttribute("data-view")); });
+  });
 
   /* ── the week, one row per day ── */
   var week = weekOutlook();
@@ -1642,12 +1555,99 @@ function renderNow() {
     });
   });
 
+  /* ── everything else, folded away ── */
+  var more = el("details", "card more");
+  more.innerHTML = '<summary><b>All the numbers</b><span>every reading, why the score is what it is, what the sea is made of</span></summary>';
+  /* ── the numbers ── */
+  var stats = el("section", "card");
+  var suit = suitFor(sc.sst);
+  stats.innerHTML =
+    '<div class="stats">' +
+      stat("Wave", mtr(sc.localHs), "at the beach · " + mtr(sc.offshoreHs) + " offshore", "wave") +
+      stat("Period", (sc.tp == null ? "—" : Math.round(sc.tp) + " s"), sc.tp >= 11 ? "groundswell — real power" : sc.tp >= 8 ? "decent push" : "short, weak chop", "period") +
+      stat("Swell from", sc.swellDir == null ? "—" : compass(sc.swellDir) + " " + Math.round(sc.swellDir) + "°", sc.offBy > 0 ? Math.round(sc.offBy) + "° outside this beach's window" : "straight into the window", "wave") +
+      stat("Wind", windLabel(sc, spot), sc.gust != null ? "gusting " + Math.round(sc.gust) + " kn" : "", "windangle") +
+      stat("Water", sc.sst == null ? "—" : r1(sc.sst) + " °C", suit.suit, "water") +
+      stat("Tide", tideLabel(sc.tide), nx.length
+        ? nx.map(function (t) { return t.type + " " + t.at + " (" + (t.m >= 0 ? "+" : "") + r1(t.m) + " m)"; }).join(" · ")
+        : r1(sc.tide.m) + " m", "tidestate") +
+      stat("Air", sc.airT == null ? "—" : Math.round(sc.airT) + " °C",
+        (sc.feelsT != null ? "feels like " + Math.round(sc.feelsT) + " °C" : "") +
+        (sc.uv != null ? " · UV " + Math.round(sc.uv) : ""), "feels") +
+      stat("Sky", cloudWord(sc), (sc.rainP ? sc.rainP + "% chance of rain" : "no rain expected"), "uv") +
+      stat("Visibility", visWord(sc), sc.vis == null ? "" : Math.round(sc.vis / 1000) + " km — matters at dawn", "vis") +
+      stat("Current", sc.curV == null ? "—" : r1(sc.curV) + " m/s",
+        sc.curV == null ? "" : (sc.curV < 0.25 ? "you will not feel it" : "it will drift you along the beach") +
+          (sc.curDir != null ? ", setting " + compass(sc.curDir) : ""), "current") +
+      stat("Pressure", sc.pressure == null ? "—" : Math.round(sc.pressure) + " hPa", pressureWord(sc), "pressure") +
+      stat("Daylight", hhmm(Math.floor(sc.sun.up / 60)) + "–" + hhmm(Math.floor(sc.sun.down / 60)), sc.dark ? "dark right now" : "", "light") +
+    '</div>' +
+    '<div class="statx" hidden></div>' +
+    '<p class="foot stat-hint">Tap any of those to find out what it is and what today\'s number means.</p>' +
+    '<div class="dialrow">' + compassSVG(sc, spot) +
+      '<div class="diallegend">' +
+        '<p><i class="k-swell"></i> swell in from ' + (sc.swellDir == null ? "—" : compass(sc.swellDir)) + '</p>' +
+        '<p><i class="k-wind"></i> wind from ' + (sc.windDir == null ? "—" : compass(sc.windDir)) + '</p>' +
+        '<p><i class="k-face"></i> beach faces ' + compass(spot.face) + '</p>' +
+        '<p><i class="k-win"></i> swell window that reaches here</p>' +
+      '</div>' +
+    '</div>';
+  more.appendChild(stats);
+  wireStats(stats, sc, spot);
+  /* ── why that score ── */
+  var why = el("section", "card");
+  var P = sc.parts;
+  why.innerHTML = '<h3>Why ' + sc.score + '</h3>' +
+    '<div class="bars">' +
+      bar("Size", P.size, mtr(sc.localHs) + " vs a " + spot.best.min + "–" + spot.best.max + " m sweet spot") +
+      bar("Wind", P.wind, windLabel(sc, spot)) +
+      bar("Swell direction", P.dir, sc.offBy > 0 ? Math.round(sc.offBy) + "° off the window" : "inside the window") +
+      bar("Period", P.period, (sc.tp == null ? "—" : Math.round(sc.tp) + " s") + " · needs " + spot.pmin + " s+") +
+      bar("Tide", P.tide, tideLabel(sc.tide) + " · wants " + spot.tide) +
+    '</div>' +
+    '<p class="foot">' + confBadge(conf) + ' — ' + esc(conf.why) +
+      (conf.lead > 0 ? ", " + conf.lead + " h ahead" : "") + '.</p>';
+  more.appendChild(why);
+  /* ── what the sea is actually made of ── */
+  if (sc.swellH != null || sc.windWaveH != null) {
+    var sea = el("section", "card");
+    var swH = sc.swellH || 0, wwH = sc.windWaveH || 0, tot = Math.max(swH + wwH, 0.01);
+    var read = swH >= wwH * 2 && (sc.swellT || 0) >= 10
+      ? "Proper groundswell. Organised lines with real power behind them — this is what you want."
+      : swH >= wwH * 1.3
+        ? "Mostly swell, with some wind chop sitting on top of it. Workable."
+        : wwH > swH
+          ? "Mostly local wind chop rather than swell: short, disorganised and gutless. The wave height number flatters it."
+          : "An even mix of swell and wind chop — bumpy, but there is something underneath.";
+    sea.innerHTML = '<h3>What the sea is made of</h3>' +
+      '<div class="mix"><span class="mix-sw" style="width:' + r1(swH / tot * 100) + '%"></span>' +
+      '<span class="mix-ww" style="width:' + r1(wwH / tot * 100) + '%"></span></div>' +
+      '<div class="mixkey">' +
+        '<span><i class="mix-sw"></i>groundswell ' + r1(swH) + ' m' +
+          (sc.swellT ? ' at ' + Math.round(sc.swellT) + ' s' : '') + '</span>' +
+        '<span><i class="mix-ww"></i>wind chop ' + r1(wwH) + ' m' +
+          (sc.windWaveT ? ' at ' + Math.round(sc.windWaveT) + ' s' : '') + '</span>' +
+      '</div>' +
+      '<p class="foot">' + esc(read) + '</p>';
+    more.appendChild(sea);
+  }
+
+  var tl = el("div", "morebit");
+  tl.innerHTML = '<h3>' + esc(dayLabel(sc.date)) + ' at a glance</h3>' +
+    dayTimeline(pick.entry, spot, sc.date, sc.sun);
+  more.appendChild(tl);
+  var L = loreFor(sc.windDir);
+  if (L) {
+    var lore = el("div", "morebit lore " + (L.good ? "lore-good" : "lore-bad"));
+    lore.innerHTML = '<h3>' + esc(L.t) + '</h3><p>' + esc(L.d) + '</p>';
+    more.appendChild(lore);
+  }
+  host.appendChild(more);
+
   /* ── share this exact call ── */
-  var sh = el("section", "card");
-  sh.innerHTML = '<h3>Send it to someone</h3>' +
-    '<p class="foot">Copies a link straight to this beach at this hour, so whoever opens it lands on the same call rather than on today.</p>' +
-    '<div class="shrow"><button id="shareBtn" class="btn">Copy link to this session</button>' +
-    '<span class="foot sharemsg"></span></div>';
+  var sh = el("div", "shrow sharerow");
+  sh.innerHTML = '<button id="shareBtn" class="mini">Copy a link to this beach at this hour</button>' +
+    '<span class="foot sharemsg"></span>';
   host.appendChild(sh);
   $("#shareBtn").addEventListener("click", function () {
     shareCurrent(spot, pick.key, $(".sharemsg", sh));
@@ -1695,85 +1695,70 @@ function wirePrefs(card) {
 }
 
 /* ── where to have a first go ───────────────────────────────────────── */
-function renderLearnCard(host) {
-  var lr = bestLearnToday();
-  var card = el("section", "card learn");
+function renderTodayCard(host) {
+  var date = (S.sel && S.sel.key) ? S.sel.key.slice(0, 10) : madridToday();
+  var isToday = date === madridToday();
+  var plan = hourlyPlan(date);
+  var lr = bestLearnToday(date);
+  var card = el("section", "card today");
+  var html = '<h3>' + (isToday ? "Today" : esc(dayLabel(date))) + '</h3>';
 
-  if (!lr) {
-    card.innerHTML = '<h3>Best place to learn today</h3>' +
-      '<p class="foot">Nothing within your drive limit is both legal and safe for a first go today. ' +
-      'Widen the drive, or wait — this coast gives you a beginner day most weeks.</p>';
-    host.appendChild(card);
-    return;
-  }
-
-  /* A flat sea is not a lesson. Say that, and point at the next day that is. */
-  if (lr.pick.L.score < 55) {
-    var nxt = nextLearnDay();
-    card.innerHTML = '<h3>Best place to learn today</h3>' +
-      '<p><b>Not today.</b> Nothing in range has enough water moving to learn on — the best you could do ' +
-      'is ' + esc(lr.pick.spot.name) + ' at ' + mtr(lr.pick.row.localHs) + ', which is a swim rather than a lesson.</p>' +
-      (nxt
-        ? '<div class="rule"><b>The next real chance</b><p>' + esc(dayLabel(nxt.date)) + ', ' +
-          hhmm(nxt.from) + '–' + hhmm(nxt.to + 1) + ' at <b>' + esc(nxt.pick.spot.name) + '</b> — ' +
-          mtr(nxt.pick.row.localHs) + ', ' + esc(windLabel(nxt.pick.row, nxt.pick.spot)) + '. ' +
-          esc(learnWhy(nxt)) + '</p></div>' +
-          '<div class="shrow"><button class="btn" id="learnOpen" data-spot="' + esc(nxt.pick.spot.id) +
-          '" data-key="' + esc(nxt.pick.row.key) + '">Open that day</button></div>'
-        : '<p class="foot">Nor is there one in the next ' + DAYS + ' days. That happens here in a flat spell.</p>');
-    host.appendChild(card);
-    var ob = $("#learnOpen");
-    if (ob) ob.addEventListener("click", function () {
-      S.spotId = ob.getAttribute("data-spot");
-      S.sel = { key: ob.getAttribute("data-key") };
-      render(); window.scrollTo({ top: 0, behavior: "smooth" });
-    });
-    return;
-  }
-
-  var pick = lr.pick, r = pick.row, spot = pick.spot;
-  var col = scoreSolid(pick.L.score);
-  var suit = suitFor(r.sst);
-  var law = boardRule(spot, lr.date, r.hour);
-
-  card.innerHTML =
-    '<div class="plan-head"><h3>Best place to learn today</h3>' +
-      '<span class="learn-badge" style="background:' + col.bg + ';color:' + col.ink + '">' +
-      pick.L.score + '</span></div>' +
-    '<p class="foot">Not the same question as “where is it best”. The main score likes a steep, punchy ' +
-    'wave; that is the one that holds a beginner under. This looks for small, sandy and slack instead.</p>' +
-    '<div class="plan-hero">' +
-      '<div><b>' + esc(spot.name) + '</b>' +
-        '<span>' + hhmm(lr.from) + '–' + hhmm(lr.to + 1) + ' · ' + esc(spot.town) +
-          ' · ' + driveMin(spot) + ' min from ' + esc(originLabel()) + '</span>' +
+  /* the beginner line first: one sentence, one button */
+  if (lr && lr.pick.L.score >= 55) {
+    var spot = lr.pick.spot, r = lr.pick.row, col = scoreSolid(lr.pick.L.score);
+    html += '<div class="today-learn">' +
+      '<span class="learn-badge" style="background:' + col.bg + ';color:' + col.ink + '">' + lr.pick.L.score + '</span>' +
+      '<div><b>Learn at ' + esc(spot.name) + ', ' + hhmm(lr.from) + '–' + hhmm(lr.to + 1) + '</b>' +
         '<span>' + mtr(r.localHs) + ' · ' + esc(windLabel(r, spot)) + ' · water ' +
-          (r.sst == null ? "—" : r1(r.sst) + " °C") + '</span></div>' +
-    '</div>' +
-    '<div class="rule"><b>Why here</b><p>' + esc(learnWhy(lr)) +
-      (driveMin(spot) > 30 && lr.near && lr.near.score < pick.L.score - 12
-        ? ' Nothing closer is worth the trip: the best within twenty-five minutes is ' +
-          esc(lr.near.spot.name) + ', and it is ' +
-          (lr.near.row.localHs < 0.15 ? 'flat' : 'only ' + mtr(lr.near.row.localHs)) +
-          ' — nothing in the water to catch.'
-        : '') + '</p></div>' +
-    '<div class="rule"><b>What to actually do</b><p>' +
-      'Stay in the broken whitewater, in water you can stand up in. Point the board at the beach, ' +
-      'wait for the white water to reach you, kick hard as it picks you up and keep your weight forward. ' +
-      'Do not paddle out the back on day one — everything you need is in the first twenty metres.</p></div>' +
-    '<div class="rule"><b>Keep yourself safe</b><p>' +
-      'Shuffle your feet going in, for weeverfish. Keep your arms out in front of you when a wave breaks ' +
-      'on you, so the board and the sand never meet your face. Pick something on land and check it every ' +
-      'few minutes — if it has moved, you are in a current, so go sideways along the beach, not against it.' +
-      (law.restricted ? " " : "") + '</p></div>' +
-    '<div class="rule"><b>Wear and bring</b><p>' + esc(suit.suit) + '. Fins, a leash, and sunscreen — ' +
-      'you will be face-down and stationary for an hour and the backs of your legs will catch it.</p></div>' +
-    '<div class="shrow"><button class="btn" id="learnOpen">Open this beach</button></div>';
+          (r.sst == null ? "—" : r1(r.sst) + " °C") + ' · ' + driveMin(spot) + ' min from ' + esc(originLabel()) + '</span>' +
+        '<span class="why">' + esc(learnWhy(lr)) + '</span></div>' +
+      '<button class="mini" id="learnOpen" data-spot="' + esc(spot.id) + '" data-key="' + esc(r.key) + '">open</button>' +
+    '</div>';
+  } else {
+    var nxt = isToday ? nextLearnDay() : null;
+    html += '<div class="today-learn today-none"><div><b>Not a day to learn on' +
+      (lr ? ' — the best in range is ' + esc(lr.pick.spot.name) + ' at ' + mtr(lr.pick.row.localHs) + ', a swim rather than a lesson' : '') + '.</b>' +
+      (nxt ? '<span>Next real chance: <b>' + esc(dayLabel(nxt.date)) + ' ' + hhmm(nxt.from) + '–' + hhmm(nxt.to + 1) +
+        ' at ' + esc(nxt.pick.spot.name) + '</b>, ' + mtr(nxt.pick.row.localHs) + ', ' + esc(windLabel(nxt.pick.row, nxt.pick.spot)) + '.</span>' : '') +
+      '</div>' +
+      (nxt ? '<button class="mini" id="learnOpen" data-spot="' + esc(nxt.pick.spot.id) + '" data-key="' + esc(nxt.pick.row.key) + '">open</button>' : '') +
+    '</div>';
+  }
+  html += '<p class="foot">Learning wants small, sandy and slack. The hours below are the best wave for someone who can already ride; ' +
+    'how to ride it is on the <button class="linkbtn" data-view="learn">Learn tab</button>.</p>';
 
+  if (plan.runs.length) {
+    html += '<div class="dayread" id="dayRead" data-key="' + esc(dayCacheKey(date)) + '"><span class="spinner sm"></span> Reading the day…</div>' +
+      '<span class="lbl runs-lbl">hour by hour · best legal beach</span>' +
+      '<ol class="runs">' + plan.runs.map(function (run) {
+        var col = scoreSolid(run.peak.score), b = band(run.peak.score);
+        var span = run.from === run.to ? hhmm(run.from) : hhmm(run.from) + "–" + hhmm(run.to + 1);
+        return '<li class="run' + (run.peak.score < 30 ? " run-dead" : "") + '" data-spot="' + esc(run.spot.id) + '" data-key="' + esc(run.peak.key) + '">' +
+          '<span class="run-time">' + span + '</span>' +
+          '<span class="run-score" style="background:' + col.bg + ';color:' + col.ink + '">' + run.peak.score + '</span>' +
+          '<span class="run-main"><b>' + esc(run.spot.name) + '</b>' +
+            '<span>' + esc(b.word) + ' · ' + mtr(run.peak.localHs) + ' · ' + esc(windLabel(run.peak, run.spot)) +
+            ' · ' + driveMin(run.spot) + ' min</span></span>' +
+        '</li>';
+      }).join("") + '</ol>';
+  } else {
+    html += '<p class="foot">No daylight hour with a board allowed anywhere in range. Widen the drive limit.</p>';
+  }
+
+  card.innerHTML = html;
   host.appendChild(card);
-  $("#learnOpen").addEventListener("click", function () {
-    S.spotId = spot.id; S.sel = { key: r.key }; render();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+  $$(".run, #learnOpen", card).forEach(function (bt) {
+    bt.addEventListener("click", function () {
+      S.spotId = bt.getAttribute("data-spot"); S.sel = { key: bt.getAttribute("data-key") }; render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
   });
+  $$(".linkbtn", card).forEach(function (bt) {
+    bt.addEventListener("click", function () { setView(bt.getAttribute("data-view")); });
+  });
+
+  if (plan.runs.length) readTheDay(card, date, plan);
 }
 
 /* ── the day, hour by hour ───────────────────────────────────────────────
@@ -1852,45 +1837,6 @@ function dayPut(date, d) {
 var dayPending = {};
 var dayFailed = {};
 
-function renderHourCard(host) {
-  var date = (S.sel && S.sel.key) ? S.sel.key.slice(0, 10) : madridToday();
-  var plan = hourlyPlan(date);
-  var card = el("section", "card hours");
-  var title = date === madridToday() ? "Today, hour by hour" : dayLabel(date) + ", hour by hour";
-
-  if (!plan.runs.length) {
-    card.innerHTML = '<h3>' + esc(title) + '</h3>' +
-      '<p class="foot">No daylight hour with a board allowed anywhere in range. Widen the drive limit.</p>';
-    host.appendChild(card);
-    return;
-  }
-
-  card.innerHTML = '<h3>' + esc(title) + '</h3>' +
-    '<p class="foot">For each hour, the best beach you are allowed to ride at. Hours at the same beach are folded together.</p>' +
-    '<div class="dayread" id="dayRead" data-key="' + esc(dayCacheKey(date)) + '"><span class="spinner sm"></span> Reading the day…</div>' +
-    '<ol class="runs">' + plan.runs.map(function (run) {
-      var col = scoreSolid(run.peak.score), b = band(run.peak.score);
-      var span = run.from === run.to ? hhmm(run.from) : hhmm(run.from) + "–" + hhmm(run.to + 1);
-      return '<li class="run' + (run.peak.score < 30 ? " run-dead" : "") + '">' +
-        '<span class="run-time">' + span + '</span>' +
-        '<span class="run-score" style="background:' + col.bg + ';color:' + col.ink + '">' + run.peak.score + '</span>' +
-        '<span class="run-main"><b>' + esc(run.spot.name) + '</b>' +
-          '<span>' + esc(b.word) + ' · ' + mtr(run.peak.localHs) + ' · ' + esc(windLabel(run.peak, run.spot)) +
-          ' · ' + driveMin(run.spot) + ' min</span></span>' +
-        '<button class="mini run-open" data-spot="' + esc(run.spot.id) + '" data-key="' + esc(run.peak.key) + '">open</button>' +
-      '</li>';
-    }).join("") + '</ol>';
-  host.appendChild(card);
-
-  $$(".run-open", card).forEach(function (b) {
-    b.addEventListener("click", function () {
-      S.spotId = b.getAttribute("data-spot"); S.sel = { key: b.getAttribute("data-key") }; render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
-  });
-
-  readTheDay(card, date, plan);
-}
 
 /* Claude turns the table into a paragraph. Cached three hours per
    (date, origin, drive, when) — the same key the Worker bounds itself on. */
@@ -3222,6 +3168,9 @@ function spotCard(entry, sc) {
       '<b>' + esc(adv.verdict) + '</b>' +
       '<p>' + esc(adv.why) + '</p>' +
       (adv.later ? '<p class="verdict-later">' + esc(adv.later) + '</p>' : '') +
+      (spot.level === "advanced"
+        ? '<p class="verdict-warn">Not a learning beach: ' + esc(spot.type) + '. ' + esc(spot.hazards[0]) + '.</p>'
+        : '') +
     '</div>' +
     '<p class="spot-now">' + mtr(sc.localHs) + ' · ' + (sc.tp == null ? "—" : Math.round(sc.tp) + ' s') +
       ' · ' + esc(windLabel(sc, spot)) + ' · tide ' + esc(tideLabel(sc.tide)) +
@@ -3258,6 +3207,10 @@ function spotCard(entry, sc) {
 
 function renderLive() {
   var host = $("#v-live"); host.innerHTML = "";
+
+  /* the one thing the models cannot tell you, for the beach on screen */
+  var pick = currentPick();
+  if (pick) renderIntelCard(host, pick.entry.spot, pick.row);
 
   var map = el("section", "card");
   map.innerHTML = '<h3>The swell, moving</h3>' +
@@ -3317,16 +3270,112 @@ function renderLive() {
   host.appendChild(src);
 }
 
-/* ════════════════════════════ view: GUIDE ════════════════════════════
+/* ════════════════════════════ view: LEARN ════════════════════════════
+   How to actually ride the thing. Pictures first, words second, and the
+   reference material (flags, glossary, the score) folded underneath.      */
+
+function renderLearn() {
+  var host = $("#v-learn"); host.innerHTML = "";
+  var LS = window.__SURF_LESSONS__, ILL = window.__SURF_ILL__ || {};
+  if (!LS) { renderReference(host); return; }
+
+  var top = el("section", "card");
+  top.innerHTML = '<h3>Ride your first wave</h3>' +
+    '<p class="foot">Three things decide a first session, and none of them is fitness.</p>' +
+    '<div class="three">' + LS.three.map(function (x) {
+      return '<div><b>' + esc(x.t) + '</b><p>' + esc(x.d) + '</p></div>';
+    }).join("") + '</div>';
+  host.appendChild(top);
+
+  var les = el("section", "card");
+  les.innerHTML = '<h3>Step by step</h3><p class="foot">Tap a step. Each one is a picture and four lines.</p>' +
+    LS.steps.map(function (st, i) {
+      return '<details class="lesson" id="lesson-' + esc(st.id) + '"' + (i === 0 ? " open" : "") + '>' +
+        '<summary><span class="lnum">' + (i + 1) + '</span>' + esc(st.t) + '</summary>' +
+        (st.ill && ILL[st.ill] ? ILL[st.ill] : '') +
+        '<ul class="lpts">' + st.pts.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join("") + '</ul>' +
+      '</details>';
+    }).join("");
+  host.appendChild(les);
+
+  /* what went wrong: tap the symptom */
+  var fix = el("section", "card fixcard");
+  fix.innerHTML = '<h3>Fix my session</h3>' +
+    '<p class="foot">Tap what happened. Most first sessions fail for one of these, and all of them are fixable next time.</p>' +
+    '<div class="chips fixchips">' + LS.fixes.map(function (f) {
+      return '<button class="chip fixchip" data-f="' + esc(f.id) + '" aria-pressed="false">' + esc(f.sym) + '</button>';
+    }).join("") + '</div>' +
+    '<div class="fixout" hidden></div>';
+  host.appendChild(fix);
+  var out = $(".fixout", fix);
+  var selected = {};
+  var showFix = function () {
+    var picked = LS.fixes.filter(function (f) { return selected[f.id]; });
+    out.hidden = !picked.length;
+    out.innerHTML = picked.map(function (f) {
+      return '<div class="fixrow"><b>' + esc(f.sym) + '</b>' +
+        '<p><span class="lbl">why</span> ' + esc(f.why) + '</p>' +
+        '<p><span class="lbl">next time</span> ' + esc(f.fix) + '</p>' +
+        '<p class="foot">See ' + f.see.map(function (id) {
+          var st = LS.steps.filter(function (x) { return x.id === id; })[0];
+          return st ? '<button class="linkbtn" data-step="' + esc(id) + '">' + esc(st.t.toLowerCase()) + '</button>'
+                    : '<button class="linkbtn" data-step="sore">less sore next time</button>';
+        }).join(" · ") + '</p></div>';
+    }).join("");
+    $$(".linkbtn", out).forEach(function (bt) {
+      bt.addEventListener("click", function () {
+        var id = bt.getAttribute("data-step");
+        var tgt = id === "sore" ? $("#sorecard") : $("#lesson-" + id);
+        if (!tgt) return;
+        if (tgt.tagName === "DETAILS") tgt.open = true;
+        tgt.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  };
+  $$(".fixchip", fix).forEach(function (c) {
+    c.addEventListener("click", function () {
+      var id = c.getAttribute("data-f");
+      selected[id] = !selected[id];
+      c.classList.toggle("on", !!selected[id]);
+      c.setAttribute("aria-pressed", selected[id] ? "true" : "false");
+      showFix();
+    });
+  });
+
+  var sore = el("section", "card");
+  sore.id = "sorecard";
+  sore.innerHTML = '<h3>Less sore next time</h3>' +
+    '<p>' + esc(LS.sore.why) + '</p>' +
+    (ILL.stretch || '') +
+    LS.sore.blocks.map(function (bk) {
+      return '<div class="rule"><b>' + esc(bk.t) + '</b><p>' + esc(bk.d) + '</p></div>';
+    }).join("");
+  host.appendChild(sore);
+
+  var month = el("section", "card");
+  month.innerHTML = '<h3>Your first month</h3>' +
+    '<ol class="steps">' + LS.month.map(function (m) {
+      return '<li><b>' + esc(m.t) + '</b><p>' + esc(m.d) + '</p></li>';
+    }).join("") + '</ol>' +
+    '<div class="shrow"><button class="btn btn-go" id="learnToday">Best place to learn today</button></div>';
+  host.appendChild(month);
+  $("#learnToday").addEventListener("click", function () { S.sel = null; setView("now"); });
+
+  var ref = el("details", "card more");
+  ref.innerHTML = '<summary><b>Reference</b><span>how to use the site, the flags, what every number means, how the score works</span></summary>';
+  renderReference(ref);
+  host.appendChild(ref);
+}
+
+/* ════════════════════════════ reference ══════════════════════════════
    Everything on this site is a number with a reason behind it, and none of
    that is obvious from looking at it. This tab says what each thing is, what
    the flags on the beach mean, and what to actually do with the site.      */
 
-function renderGuide() {
-  var host = $("#v-guide"); host.innerHTML = "";
+function renderReference(host) {
 
   /* — how to use it — */
-  var how = el("section", "card");
+  var how = el("div", "refsec");
   how.innerHTML = '<h3>How to use this</h3>' +
     '<p class="foot">Four ways in, depending on how much you want to think about it.</p>' +
     '<ol class="steps">' + (window.__SURF_HOWTO__ || []).map(function (h) {
@@ -3335,7 +3384,7 @@ function renderGuide() {
   host.appendChild(how);
 
   /* — the flags — */
-  var flags = el("section", "card");
+  var flags = el("div", "refsec");
   flags.innerHTML = '<h3>The flags on the beach</h3>' +
     '<p class="foot">These are the Spanish national colours, flown at lifeguarded beaches in season. ' +
     'They beat everything on this site: a forecast is a guess about the sea, a flag is a person ' +
@@ -3358,7 +3407,7 @@ function renderGuide() {
     if (!row) { row = { name: g.g, items: [] }; groups.push(row); }
     row.items.push(g);
   });
-  var gloss = el("section", "card");
+  var gloss = el("div", "refsec");
   gloss.innerHTML = '<h3>What every number means</h3>' +
     '<p class="foot">Tap a heading. Each one says what the thing is, why it matters on a bodyboard, ' +
     'and what a good value looks like on this coast.</p>' +
@@ -3374,7 +3423,7 @@ function renderGuide() {
   host.appendChild(gloss);
 
   /* — the score, spelled out — */
-  var sc = el("section", "card");
+  var sc = el("div", "refsec");
   sc.innerHTML = '<h3>How the score is worked out</h3>' +
     '<p class="foot">Five things, weighted for a bodyboard rather than a surfboard — a sponge wants a ' +
     'steeper, punchier, shallower wave, is happy at half the size a longboard needs, and likes the ' +
@@ -3396,7 +3445,7 @@ function renderGuide() {
   host.appendChild(sc);
 
   /* — where the numbers come from — */
-  var src = el("section", "card");
+  var src = el("div", "refsec");
   src.innerHTML = '<h3>Where it all comes from</h3>' +
     '<p>Four independent weather models from four agencies — ECMWF, Météo-France, NOAA and DWD — ' +
     'read ten days ahead for all ' + SPOTS.length + ' beaches at once. Nothing here needs an account ' +
@@ -3462,7 +3511,7 @@ function render() {
   else if (S.view === "grid") renderGrid();
   else if (S.view === "spots") renderSpots();
   else if (S.view === "live") renderLive();
-  else if (S.view === "guide") renderGuide();
+  else if (S.view === "learn") renderLearn();
 }
 
 function showError(msg) {

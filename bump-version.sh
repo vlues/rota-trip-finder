@@ -19,7 +19,7 @@ PAGES = ["index.html", "hikes/index.html", "rings/index.html", "surf/index.html"
 # Local assets that must never be paired across builds. Stylesheets count:
 # they are cached exactly like the scripts, and a page wearing last build's
 # CSS is just as broken as one running last build's JS.
-LOCAL_JS = r"(?:app|data|config|build-check)\.js"
+LOCAL_JS = r"(?:app|data|lessons|config|build-check)\.js"
 LOCAL_CSS = r"(?:app|style|styles)\.css"
 meta_re = re.compile(r'(<meta name="app-version" content=")[^"]*(")')
 src_re = re.compile(r'(src=")((?:\.{1,2}/)*' + LOCAL_JS + r')(\?v=[^"]*)?(")')
