@@ -1534,42 +1534,7 @@ function renderNow() {
     bt.addEventListener("click", function () { setView(bt.getAttribute("data-view")); });
   });
 
-  /* ── the week, one row per day ── */
-  var week = weekOutlook();
-  var top = week.filter(function (d) { return !d.empty; })
-    .reduce(function (a, d) { return !a || d.best.row.score > a.best.row.score ? d : a; }, null);
-  var hits = week.filter(function (d) { return !d.empty && d.best.row.score >= S.bar; }).length;
-  var nb = el("section", "card");
-  nb.innerHTML = '<h3>The week ahead</h3>' +
-    '<div class="barpick"><span class="lbl">my bar</span>' +
-      '<select id="barSel" aria-label="What counts as worth going">' +
-        BAR_OPTS.map(function (o) {
-          return '<option value="' + o.v + '"' + (o.v === S.bar ? " selected" : "") + '>' + esc(o.label) + '</option>';
-        }).join("") + '</select>' +
-      '<b class="barhits' + (hits ? " on" : "") + '">' +
-        (hits ? hits + (hits === 1 ? " day clears it" : " days clear it") : "nothing clears it") + '</b>' +
-    '</div>' +
-    '<p class="foot">' + (top && top.best.row.score >= 55
-      ? "Pick of the week is <b>" + esc(dayLabel(top.date)) + "</b> at " + esc(top.best.entry.spot.name) +
-        ". The score is the best single hour; the time range beside it is how long the day stays near that."
-      : "Nothing outstanding in the next " + DAYS + " days — so these are the least-bad hours of each day, which is the thing worth knowing on a flat week.") + '</p>' +
-    '<div class="days">' + week.map(dayRowHtml).join("") + '</div>';
-  host.appendChild(nb);
-
-  $("#barSel").addEventListener("change", function () {
-    S.bar = +this.value || 62;
-    try { localStorage.setItem("rotasurf.bar", String(S.bar)); } catch (e) {}
-    render();
-  });
-
-  $$(".dayopen", nb).forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      S.spotId = btn.getAttribute("data-spot");
-      S.sel = { key: btn.getAttribute("data-key") };
-      render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
-  });
+  renderWeekPlanner(host);
 
   /* ── everything else, folded away ── */
   var more = el("details", "card more");
@@ -1927,13 +1892,122 @@ function showDay(box, text, model, at) {
     ' from the table below · ' + esc(agoLabel(at)) + '</span>';
 }
 
+/* ── the week, as a plan ────────────────────────────────────────────────
+   One row per day for the next seven: learn here, ride here, or rest — with
+   the same rules as everything else (legal hours, your drive limit, the part
+   of the day you can go, and for today, hours you can still make). A beginner
+   gets the learning pick first; the riders' pick sits under it when it clears
+   the bar. */
+function planWeek() {
+  var wt = whenTest();
+  return S.model.days.slice(0, 7).map(function (date) {
+    var learn = bestLearnToday(date);
+    if (learn && learn.pick.L.score < 55) learn = null;
+
+    var ride = null;
+    for (var h = hourFloor(date); h < 24; h++) {
+      var b = bestLegalAt(date + "T" + pad(h) + ":00");
+      if (!b || (wt && !wt(b.row))) continue;
+      if (!ride || b.row.score > ride.row.score) ride = b;
+    }
+    var run = ride ? (dayWindowFor(ride.entry, date) || { from: ride.row.hour, to: ride.row.hour }) : null;
+    var rideOK = ride && ride.row.score >= S.bar;
+
+    var rest = null;
+    if (!learn && !rideOK) {
+      var r = ride && ride.row;
+      rest = !r ? "nothing you can get to"
+           : r.localHs < 0.3 ? "flat everywhere in range"
+           : windWordFor(r, ride.entry.spot) === "onshore" ? "onshore and messy"
+           : r.score < 30 ? "small and messy"
+           : "nothing clears your bar";
+    }
+    return { date: date, learn: learn, ride: ride, run: run, rideOK: rideOK, rest: rest };
+  });
+}
+
+function planLine(d) {
+  if (d.learn) {
+    var L = d.learn, sp = L.pick.spot, r = L.pick.row;
+    return "Learn · " + sp.name + " · " + hhmm(L.from) + "–" + hhmm(L.to + 1) + " · " + mtr(r.localHs) +
+      (d.rideOK ? " (riders: " + d.ride.entry.spot.name + " " + hhmm(d.run.from) + "–" + hhmm(d.run.to + 1) + ", " + d.ride.row.score + ")" : "");
+  }
+  if (d.rideOK) {
+    return "Ride · " + d.ride.entry.spot.name + " · " + hhmm(d.run.from) + "–" + hhmm(d.run.to + 1) + " · " +
+      mtr(d.ride.row.localHs) + " · " + d.ride.row.score + "/100";
+  }
+  return "Rest · " + d.rest;
+}
+
+function renderWeekPlanner(host) {
+  var week = planWeek();
+  var goDays = week.filter(function (d) { return d.learn || d.rideOK; }).length;
+  var card = el("section", "card wk");
+  card.innerHTML = '<div class="plan-head"><h3>Your week</h3>' +
+    '<select id="barSel" aria-label="What counts as worth going">' +
+      BAR_OPTS.map(function (o) {
+        return '<option value="' + o.v + '"' + (o.v === S.bar ? " selected" : "") + '>' + esc(o.label) + '</option>';
+      }).join("") + '</select></div>' +
+    '<p class="foot">' + (goDays ? goDays + (goDays === 1 ? " day" : " days") + " worth going in the next seven"
+      : "Nothing worth going in the next seven days") + ' — within ' +
+      (S.maxDrive > 900 ? "any drive" : S.maxDrive + " minutes") + ' of ' + esc(originLabel()) +
+      (S.when !== "any" ? ', ' + esc(WHEN_OPTS.filter(function (o) { return o.id === S.when; })[0].label) : '') + '.</p>' +
+    '<div class="wkrows">' + week.map(function (d) {
+      var kind = d.learn ? "learn" : d.rideOK ? "ride" : "rest";
+      var spot = d.learn ? d.learn.pick.spot : d.ride ? d.ride.entry.spot : null;
+      var key = d.learn ? d.learn.pick.row.key : d.ride ? d.ride.row.key : "";
+      var main, sub;
+      if (d.learn) {
+        var L = d.learn, r = L.pick.row;
+        main = esc(L.pick.spot.name) + ' <span class="wk-when">' + hhmm(L.from) + '–' + hhmm(L.to + 1) + '</span>';
+        sub = mtr(r.localHs) + ' · ' + esc(windWordFor(r, L.pick.spot)) + ' · ' + driveMin(L.pick.spot) + ' min' +
+          (d.rideOK ? ' · <b>riders:</b> ' + esc(d.ride.entry.spot.name) + ' ' + hhmm(d.run.from) + '–' + hhmm(d.run.to + 1) + ' · ' + d.ride.row.score : '');
+      } else if (d.rideOK) {
+        var rr = d.ride.row;
+        main = esc(d.ride.entry.spot.name) + ' <span class="wk-when">' + hhmm(d.run.from) + '–' + hhmm(d.run.to + 1) + '</span>';
+        sub = mtr(rr.localHs) + ' · ' + esc(windWordFor(rr, d.ride.entry.spot)) + ' · ' + driveMin(d.ride.entry.spot) + ' min · <b>' + rr.score + '</b>/100';
+      } else {
+        main = '<span class="wk-resttext">' + esc(capitalise(d.rest)) + '</span>';
+        sub = d.ride ? 'best on offer: ' + esc(d.ride.entry.spot.name) + ' ' + hhmm(d.ride.row.hour) + ' · ' + d.ride.row.score + '/100' : '';
+      }
+      return '<div class="wkrow wk-' + kind + '"' + (spot ? ' data-spot="' + esc(spot.id) + '" data-key="' + esc(key) + '" role="button" tabindex="0"' : '') + '>' +
+        '<span class="wk-day">' + esc(dayLabel(d.date)) + '</span>' +
+        '<span class="wk-kind">' + kind + '</span>' +
+        '<span class="wk-main">' + main + '<span class="wk-sub">' + sub + '</span></span>' +
+      '</div>';
+    }).join("") + '</div>' +
+    '<div class="shrow"><button id="wkCopy" class="mini">Copy the week</button><span class="foot sharemsg"></span></div>';
+  host.appendChild(card);
+
+  $("#barSel").addEventListener("change", function () {
+    S.bar = +this.value || 62;
+    try { localStorage.setItem("rotasurf.bar", String(S.bar)); } catch (e) {}
+    render();
+  });
+  $$(".wkrow[data-spot]", card).forEach(function (row) {
+    row.addEventListener("click", function () {
+      S.spotId = row.getAttribute("data-spot"); S.sel = { key: row.getAttribute("data-key") }; render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+  $("#wkCopy").addEventListener("click", function () {
+    var text = "Rota Wave Watch — the week from " + originLabel() + "\n" +
+      week.map(function (d) { return dayLabel(d.date) + ": " + planLine(d); }).join("\n") +
+      "\n" + location.href.split("#")[0];
+    var msg = $(".sharemsg", card);
+    var done = function () { msg.textContent = "copied"; };
+    var fail = function () { msg.textContent = "could not copy — long-press to select"; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fail);
+    else fail();
+  });
+}
+
 /* ── the one-button answer ──────────────────────────────────────────── */
 function renderPlanCard(host) {
   var card = el("section", "card plan");
   if (!S.plan) {
     card.innerHTML = '<h3>Just tell me where to go</h3>' +
-      '<p class="foot">One answer instead of a dashboard: the best beach and hour in the next ' + DAYS +
-      ' days, picked only from hours you are actually allowed to ride in, with the reasoning behind it.</p>' +
+      '<p class="foot">The best beach and hour in the next ' + DAYS + ' days, from hours you are allowed in, and why.</p>' +
       prefsHtml() +
       '<div class="shrow"><button id="planBtn" class="btn btn-go">Plan my session</button>' +
       '<span class="foot">from ' + esc(originLabel()) +
@@ -3531,7 +3605,7 @@ function renderHeader() {
     var key = (S.sel && S.sel.key) || nowKey();
     var isNow = key === nowKey();
     when.innerHTML = isNow
-      ? '<span class="lbl">showing right now · ' + esc(MTIME.format(new Date())) + ' in Spain</span>'
+      ? ''
       : '<span class="lbl">showing ' + esc(dayLabel(key.slice(0, 10)) + " at " + hhmm(+key.slice(11, 13))) + '</span>' +
         '<button id="backNow" class="mini">back to now</button>';
     var bn = $("#backNow");
