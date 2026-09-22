@@ -15,7 +15,7 @@ V = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 root = pathlib.Path(".")
 (root / "version.json").write_text(json.dumps({"v": V}) + "\n")
 
-PAGES = ["index.html", "hikes/index.html", "rings/index.html", "surf/index.html"]
+PAGES = ["index.html", "hikes/index.html", "rings/index.html", "surf/index.html", "snow/index.html"]
 # Local assets that must never be paired across builds. Stylesheets count:
 # they are cached exactly like the scripts, and a page wearing last build's
 # CSS is just as broken as one running last build's JS.

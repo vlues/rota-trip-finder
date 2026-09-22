@@ -611,9 +611,9 @@ Format, strictly: five lines and nothing else. Do not narrate your searching, do
    split across a dozen rows. Rebuild them: drop anything before the first
    label, and collapse each label's block back onto one line. */
 const INTEL_LABELS = ['WATER', 'FLAG', 'PARK', 'SEA', 'WATCH'];
-export function tidyIntel(raw) {
+export function tidyIntel(raw, labels = INTEL_LABELS) {
   const text = String(raw || '').replace(/\r/g, '');
-  const found = INTEL_LABELS
+  const found = labels
     .map((label) => ({ label, at: text.search(new RegExp(`(^|\\n)\\s*${label}\\s*:`)) }))
     .filter((x) => x.at >= 0)
     .sort((a, b) => a.at - b.at);
@@ -711,6 +711,56 @@ function validateDay(body) {
     if (!['offshore', 'cross-shore', 'onshore', 'glassy'].includes(r.windWord)) return 'bad wind word';
   }
   return null;
+}
+
+/* Snow Finder's Live check is open like the surf one, so its cost ceiling is
+   this list: only these resorts are answerable, one answer per resort per
+   six hours. */
+const SNOW_RESORTS = new Set([
+  "Sierra Nevada", "Sierra de Béjar – La Covatilla", "Valdesquí", "Puerto de Navacerrada", "La Pinilla",
+  "Javalambre", "Valdelinares", "Manzaneda", "San Isidro", "Valgrande-Pajares", "Fuentes de Invierno",
+  "Leitariegos", "Alto Campoo", "Lunada", "Candanchú", "Astún", "Formigal-Panticosa", "Cerler",
+  "Boí Taüll", "Port Ainé", "Espot Esquí", "Baqueira Beret", "La Molina", "Masella", "Vallter 2000",
+  "Vall de Núria",
+]);
+
+const SNOW_SYSTEM = `You are the live-intel card inside "Rota Snow Finder", used by a complete beginner driving from Rota, Spain to a named ski resort in Spain to learn to ski.
+
+The page ALREADY has the weather-model snow depth and forecast, last season's prices and the drive. Your job is what only the web knows RIGHT NOW: the resort's own snow report and lift status page, its ticket shop, road-condition services (DGT, Guardia Civil, the regional road authority), local news, and recent posts.
+
+Reply with exactly 5 short lines, plain text, each under 25 words, in this form:
+OPEN: is the resort open today, how many lifts or km are running, and what season dates are announced. If closed for the season, say when it is expected to open.
+PRICE: the adult one-day pass price on sale today, and a beginner rental package price if the resort's shop publishes one. Give the currency and say if it is dynamic.
+ROAD: whether chains or winter tyres are required on the access road right now, and any closure.
+PARK: anything current about the car park — full, closed, charges, shuttle.
+WATCH: the one thing that would ruin a beginner's first day if they did not know it today.
+
+Rules: if the web gives nothing recent for a line, say what is normally true for this resort at this time of year and start that line with "Usually". Never invent a price, a closure or an opening date. Prefer the resort's own site for OPEN and PRICE and name the date the figure was published if you can.
+
+Format, strictly: five lines and nothing else. Do not narrate your searching, do not summarise afterwards. Each line is one single line. No preamble, no links, no markdown, no bullet characters.`;
+
+const SNOW_LABELS = ['OPEN', 'PRICE', 'ROAD', 'PARK', 'WATCH'];
+
+async function snowIntel(body, env) {
+  const model = env.CLAUDE_MODEL || DEFAULT_MODEL;
+  const resort = [body.name, body.area, body.region, 'Spain'].filter(Boolean).join(', ').slice(0, 200);
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model, max_tokens: 1500, system: SNOW_SYSTEM,
+      tools: [webSearchTool(model, 5)],
+      messages: [{ role: 'user', content: `Resort: ${resort}. Today: ${body.today || 'unknown'}. The five lines, please.` }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  const text = (data.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
+  return { demo: false, text: tidyIntel(text, SNOW_LABELS), model };
 }
 
 async function surfIntel(body, env) {
@@ -898,14 +948,14 @@ export default {
         stayProvider: name,
         accessCodeRequired: Boolean(env.ACCESS_CODE),
         /* Live check needs none, so a page can tell whether to ask. */
-        openRoutes: ['/api/surf', '/api/day'],
+        openRoutes: ['/api/surf', '/api/day', '/api/snow'],
         /* Every POST route sits behind the access code, so without this there
            is no way to tell a Worker running old code from a wrong passphrase —
            both answer 401. Listing them here, on the one ungated endpoint,
            makes a deploy verifiable by anyone. */
         routes: [
           '/api/stays', '/api/flights', '/api/plan', '/api/intent',
-          '/api/spot', '/api/trail', '/api/surf', '/api/day', '/api/rings-filter',
+          '/api/spot', '/api/trail', '/api/surf', '/api/day', '/api/snow', '/api/rings-filter',
           '/api/ai', '/api/diag',
         ],
       }, request, env);
@@ -919,7 +969,7 @@ export default {
        and only once per beach per six hours. Everything else — the paid stay
        and flight providers, and the open-ended Claude routes — still needs
        the shared code. */
-    const isOpenIntel = (url.pathname === '/api/surf' || url.pathname === '/api/day') && request.method === 'POST';
+    const isOpenIntel = (url.pathname === '/api/surf' || url.pathname === '/api/day' || url.pathname === '/api/snow') && request.method === 'POST';
     if (isOpenIntel && !originAllowed(request, env)) {
       return json({ error: 'This endpoint only answers requests from the site.' }, request, env, 403);
     }
@@ -972,6 +1022,16 @@ export default {
              rebuilt, so old entries must not be served. */
           const key = 'surf:v2:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 10);
           return json(await cached(key, 6 * 3600, () => surfIntel(body, env)), request, env);
+        }
+        case '/api/snow': {
+          if (!env.ANTHROPIC_API_KEY) return json({ demo: true, text: null }, request, env);
+          if (!SNOW_RESORTS.has(String(body.name || ''))) {
+            return json({ error: 'Unknown resort.' }, request, env, 400);
+          }
+          /* Lift status and today's price are same-day facts: the key carries
+             the date and the entry lives six hours. */
+          const key = 'snow:v1:' + String(body.name || '').slice(0, 80) + ':' + new Date().toISOString().slice(0, 10);
+          return json(await cached(key, 6 * 3600, () => snowIntel(body, env)), request, env);
         }
         case '/api/day': {
           if (!env.ANTHROPIC_API_KEY) return json({ demo: true, text: null }, request, env);

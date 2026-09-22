@@ -4,7 +4,7 @@ Cheap stays, cheap flights and a day-by-day plan for the **Naval Station Rota, S
 
 Static frontend on **GitHub Pages**. All API keys live in a **Cloudflare Worker** you deploy once. Friends just open the link.
 
-**Also on this site: [Wave Watch](surf/)** — live bodyboarding conditions for Rota and the Gulf of Cádiz: a score per hour for seventeen beaches, a week-long grid of when to go, where to park at each one, whether boards are allowed that day, and what thickness of wetsuit the water actually wants. **[Hike Finder](hikes/)** — 100 walks across Spain on a terrain map, each with the car park, the walking time, whether it is open right now and a live web-search check. And **[Rota Range Rings](rings/)** — a drive-time chart of 154 remote, cool, easy trips from Rota. Rings are hours of driving; every pin opens a super-simple brief (what it is, the one thing to do, parking in one line — the deep detail folds away), with a first-load tutorial, a 🎲 surprise-me button, saved places, a smart type-in filter (`"castles in france under 12 h"`), and a **Live intel** card that asks Claude — through the same Worker (`POST /api/spot`, web search, cached 12 h) — what's happening at a destination right now.
+**Also on this site: [Wave Watch](surf/)** — live bodyboarding conditions for Rota and the Gulf of Cádiz: a score per hour for seventeen beaches, a week-long grid of when to go, where to park at each one, whether boards are allowed that day, and what thickness of wetsuit the water actually wants. **[Hike Finder](hikes/)** — 100 walks across Spain on a terrain map, each with the car park, the walking time, whether it is open right now and a live web-search check. **[Snow Finder](snow/)** — skiing and snowboarding from Rota for someone who has never done either: 26 Spanish resorts by drive time from the naval station, live snow and weather at the base and the top of each, the season and price tier for any date you pick, the honest ski-versus-snowboard answer, what to rent, what to buy and where, and a Live check that asks the web for today's lift status and pass price. And **[Rota Range Rings](rings/)** — a drive-time chart of 154 remote, cool, easy trips from Rota. Rings are hours of driving; every pin opens a super-simple brief (what it is, the one thing to do, parking in one line — the deep detail folds away), with a first-load tutorial, a 🎲 surprise-me button, saved places, a smart type-in filter (`"castles in france under 12 h"`), and a **Live intel** card that asks Claude — through the same Worker (`POST /api/spot`, web search, cached 12 h) — what's happening at a destination right now.
 
 **API setup in one script.** Run `./setup-api.sh` from the repo root: it prompts for your Anthropic key (and an optional access code for friends), stores them as Cloudflare secrets, and deploys the Worker. Nothing secret ever touches the website.
 
@@ -45,6 +45,20 @@ Nothing but you ever sees a key. The Worker enforces an origin allowlist and a s
 **Saved + share.** Heart anything and it lands in the Saved tab (with a badge). Hit Share and your friends open the same shortlist — the actual picture cards, prices and criteria, before live search even returns. State is in the URL — no database, no accounts.
 
 One sunset-glass look, implemented from the Claude Design canvas (`Spain Vacation.dc.html`) on the "Classical" design-system tokens. Three tabs — Stays, Flights, Saved — and nothing else. (The old Rota day-planner endpoint still lives in the Worker for anyone who wants it back.)
+
+---
+
+## Snow Finder (`snow/`)
+
+Skiing and snowboarding from Rota, for a first-timer: **[snow/](snow/)**.
+
+- **Now.** Today's verdict for Sierra Nevada, the closest hill (4 h 15 from the gate): in season or not, weeks until it opens, snow at the top and at Pradollano, and what fell and is coming. Under it, the best place to learn today, ranked on how forgiving the hill is, the drive, the forecast and the price tier; a date planner that says whether a chosen day is open, high or low season, how crowded, the forecast inside sixteen days or the typical snow beyond it, and when to leave the base; and a sixteen-day grid for any resort.
+- **Resorts.** All 26 Spanish resorts sorted by drive time, with filters (under 6 h, good to learn, cheap pass, open now, Pyrenees, by train). Each opens a sheet: last season's pass, rental and lesson prices, the car park with a Navigate button, the route, the chains rule, where to sleep, the bus alternative, a seven-day forecast, and the Live check.
+- **Learn.** Why to ski first (and why it is not roller skating), what falling is like, the first day hour by hour, the six things the lesson teaches, "Fix my day", the day after, and a glossary.
+- **Gear.** Rent versus buy, the shopping list with prices, what never to wear, where to get it (Decathlon in El Puerto or Jerez, MWR Outdoor Rec, the resort base, Wallapop), and what a first weekend costs.
+- **Trip.** The drive gate-to-car-park, chains and road closures, when to go and when not to, where to sleep, the no-car options (train to La Molina, rack railway to Núria, bus from Granada), and a two-day plan.
+
+Weather and snow come from Open-Meteo, batched: one hourly call and one daily call for the base and top of every resort, with per-point elevation. Snow depth is the model's estimate and the page says so. The Live check is `POST /api/snow` on the Worker — open like the surf one, origin-checked, bounded by the resort list and cached six hours per resort.
 
 ---
 
